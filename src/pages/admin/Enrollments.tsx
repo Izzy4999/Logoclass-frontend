@@ -8,10 +8,11 @@ import PageHeader from "@/components/shared/PageHeader";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import Modal from "@/components/shared/Modal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import InfiniteSelect from "@/components/shared/InfiniteSelect";
 import { enrollmentsApi, gradeLevelsApi, classesApi, academicYearsApi } from "@/api/classes";
 import { usersApi } from "@/api/users";
-import { formatDate } from "@/lib/utils";
 import type { StudentEnrollment } from "@/types/class";
+import type { User } from "@/types/user";
 
 const STATUS_COLORS: Record<string, string> = {
   ENROLLED:    "bg-blue-100 text-blue-700",
@@ -50,9 +51,11 @@ export default function Enrollments() {
   const [deleteTarget, setDeleteTarget] = useState<StudentEnrollment | null>(null);
   const [serverError, setServerError] = useState("");
 
-  const { register: registerCreate, handleSubmit: handleCreateSubmit, reset: resetCreate, formState: { errors: createErrors } } = useForm<CreateEnrollmentForm>({
+  const { register: registerCreate, handleSubmit: handleCreateSubmit, reset: resetCreate, setValue: setCreateValue, watch: watchCreate, formState: { errors: createErrors } } = useForm<CreateEnrollmentForm>({
     resolver: zodResolver(createSchema),
   });
+
+  const studentId = watchCreate("studentId");
 
   const { register: registerEdit, handleSubmit: handleEditSubmit, reset: resetEdit } = useForm<EditEnrollmentForm>({
     resolver: zodResolver(editSchema),
@@ -72,14 +75,15 @@ export default function Enrollments() {
   const { data: gradesData }  = useQuery({ queryKey: ["grade-levels-all"], queryFn: () => gradeLevelsApi.list({ limit: 100 }) });
   const { data: classesData } = useQuery({ queryKey: ["classes-all"], queryFn: () => classesApi.list({ limit: 100, gradeLevelId: gradeFilter || undefined }) });
   const { data: yearsData }   = useQuery({ queryKey: ["academic-years-all"], queryFn: () => academicYearsApi.list({ limit: 100 }) });
-  const { data: studentsData } = useQuery({ queryKey: ["students-list"], queryFn: () => usersApi.list({ limit: 200 }) });
+  const studentFetcher = ({ page, search }: { page: number; search: string }) =>
+    usersApi.list({ page, limit: 100, search: search || undefined })
+      .then(r => ({ data: r.data.data, meta: r.data.meta }));
 
   const enrollments = enrollData?.data?.data ?? [];
   const meta        = enrollData?.data?.meta;
   const grades      = gradesData?.data?.data ?? [];
   const classes     = classesData?.data?.data ?? [];
   const years       = yearsData?.data?.data ?? [];
-  const students    = studentsData?.data?.data ?? [];
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["enrollments"] });
 
@@ -197,12 +201,18 @@ export default function Enrollments() {
         <form onSubmit={handleCreateSubmit((data) => createMut.mutate(data))} className="space-y-3">
           {serverError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>}
           <div>
-            <label className="text-xs font-medium text-muted-foreground">Student *</label>
-            <select {...registerCreate("studentId")}
-              className={`mt-1 w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${createErrors.studentId ? "border-destructive" : "border-slate-200"}`}>
-              <option value="">— Select student —</option>
-              {students.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
-            </select>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Student *</label>
+            <InfiniteSelect<User>
+              value={studentId ?? ""}
+              onChange={(id) => setCreateValue("studentId", id, { shouldValidate: true })}
+              placeholder="Search and select student…"
+              queryKey={["users", "student-select"]}
+              fetcher={studentFetcher}
+              getLabel={(u) => `${u.firstName} ${u.lastName}`}
+              getValue={(u) => u.id}
+              getSublabel={(u) => u.email}
+              enabled={createOpen}
+            />
             {createErrors.studentId && <p className="text-xs text-destructive mt-1">{createErrors.studentId.message}</p>}
           </div>
           <div>

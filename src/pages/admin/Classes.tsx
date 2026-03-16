@@ -8,9 +8,11 @@ import PageHeader from "@/components/shared/PageHeader";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import Modal from "@/components/shared/Modal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import InfiniteSelect from "@/components/shared/InfiniteSelect";
 import { classesApi, gradeLevelsApi } from "@/api/classes";
 import { usersApi } from "@/api/users";
 import type { ClassSection } from "@/types/class";
+import type { User } from "@/types/user";
 
 const classSchema = z.object({
   name: z.string().min(1, "Class name is required"),
@@ -28,9 +30,11 @@ export default function Classes() {
   const [deleteTarget, setDeleteTarget] = useState<ClassSection | null>(null);
   const [serverError, setServerError] = useState("");
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<ClassFormData>({
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<ClassFormData>({
     resolver: zodResolver(classSchema),
   });
+
+  const teacherId = watch("teacherId");
 
   const { data, isLoading } = useQuery({
     queryKey: ["classes", gradeFilter],
@@ -42,14 +46,12 @@ export default function Classes() {
     queryFn: () => gradeLevelsApi.list({ limit: 100 }),
   });
 
-  const { data: teachersData } = useQuery({
-    queryKey: ["teachers-list"],
-    queryFn: () => usersApi.list({ limit: 200 }),
-  });
+  const teacherFetcher = ({ page, search }: { page: number; search: string }) =>
+    usersApi.list({ page, limit: 100, search: search || undefined })
+      .then(r => ({ data: r.data.data, meta: r.data.meta }));
 
   const classes: ClassSection[] = data?.data?.data ?? [];
   const grades = gradesData?.data?.data ?? [];
-  const teachers = teachersData?.data?.data ?? [];
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["classes"] });
 
@@ -82,7 +84,7 @@ export default function Classes() {
     setServerError("");
   };
 
-  const ClassForm = ({ isEdit }: { isEdit?: boolean }) => (
+  const renderForm = (isEdit: boolean) => (
     <form onSubmit={handleSubmit((data) => isEdit ? editMut.mutate(data) : createMut.mutate(data))} className="space-y-3">
       {serverError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>}
       <div className="grid grid-cols-2 gap-3">
@@ -110,12 +112,18 @@ export default function Classes() {
         {errors.gradeLevelId && <p className="text-xs text-destructive mt-1">{errors.gradeLevelId.message}</p>}
       </div>
       <div>
-        <label className="text-xs font-medium text-muted-foreground">Class Teacher (optional)</label>
-        <select {...register("teacherId")}
-          className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-          <option value="">— Unassigned —</option>
-          {teachers.map(t => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
-        </select>
+        <label className="text-xs font-medium text-muted-foreground mb-1 block">Class Teacher (optional)</label>
+        <InfiniteSelect<User>
+          value={teacherId ?? ""}
+          onChange={(id) => setValue("teacherId", id || undefined)}
+          placeholder="Search and select teacher…"
+          queryKey={["users", "teacher-select"]}
+          fetcher={teacherFetcher}
+          getLabel={(u) => `${u.firstName} ${u.lastName}`}
+          getValue={(u) => u.id}
+          getSublabel={(u) => u.email}
+          enabled={createOpen || !!editTarget}
+        />
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <button type="button" onClick={() => isEdit ? setEditTarget(null) : setCreateOpen(false)}
@@ -200,11 +208,11 @@ export default function Classes() {
       )}
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Class">
-        <ClassForm />
+        {renderForm(false)}
       </Modal>
 
       <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title="Edit Class">
-        <ClassForm isEdit />
+        {renderForm(true)}
       </Modal>
 
       <ConfirmDialog

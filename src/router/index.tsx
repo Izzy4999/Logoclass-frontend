@@ -1,19 +1,9 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
-import { lazy, Suspense } from "react";
 import { ProtectedRoute, GuestRoute, ForcePasswordChangeRoute, SuperAdminRoute, PermissionRoute } from "./guards";
 import AppShell from "@/components/layout/AppShell";
 import AuthLayout from "@/components/layout/AuthLayout";
-import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import RouteError from "@/components/shared/RouteError";
-
-const L = (factory: () => Promise<{ default: React.ComponentType }>) => {
-  const Comp = lazy(factory);
-  return (
-    <Suspense fallback={<LoadingSpinner fullScreen />}>
-      <Comp />
-    </Suspense>
-  );
-};
+import { L } from "./lazy";
 
 export const router = createBrowserRouter([
   // ─── Guest routes ────────────────────────────────────────────────────────────

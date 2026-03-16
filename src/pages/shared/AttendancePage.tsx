@@ -65,7 +65,7 @@ export default function AttendancePage() {
 
   const { data: classData } = useQuery({
     queryKey: ["classes-for-attendance"],
-    queryFn: () => classesApi.list({ limit: 200 }),
+    queryFn: () => classesApi.list({ limit: 100 }),
   });
 
   const records: AttendanceRecord[] = data?.data?.data ?? [];
@@ -81,7 +81,7 @@ export default function AttendancePage() {
 
   const { data: classStudentsData } = useQuery({
     queryKey: ["class-for-bulk-mark", markClassId],
-    queryFn: () => attendanceApi.listForClass(markClassId, { limit: 200 }),
+    queryFn: () => attendanceApi.listForClass(markClassId, { limit: 100 }),
     enabled: !!markClassId,
   });
 
