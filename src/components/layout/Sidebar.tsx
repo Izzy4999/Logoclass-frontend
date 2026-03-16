@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Shield, School, BookOpen, Video,
   ClipboardList, PenTool, FileText, Calendar, UserCheck, Megaphone,
   CreditCard, Wallet, ScrollText, Settings, MessageSquare, Bell,
-  User, Building2, ChevronLeft, ChevronRight, LogOut,
+  User, Building2, ChevronLeft, ChevronRight, LogOut, BarChart2,
 } from "lucide-react";
 import { LogoMark, LogoFull } from "@/components/Logo";
 import type { Permission } from "@/types/role";
@@ -48,6 +48,7 @@ const ADMIN_ITEMS: NavItem[] = [
   { label: "Announcements", path: "/announcements", icon: Megaphone, permission: "CREATE_ANNOUNCEMENT" },
   { label: "Fees", path: "/fees", icon: CreditCard, permission: "MANAGE_PAYMENTS" },
   { label: "Payments", path: "/payments", icon: Wallet, permission: "MANAGE_PAYMENTS" },
+  { label: "Analytics", path: "/analytics", icon: BarChart2, alwaysShow: true },
   { label: "Action Logs", path: "/action-logs", icon: ScrollText, permission: "VIEW_ACTION_LOGS" },
   { label: "Settings", path: "/settings", icon: Settings, permission: "MANAGE_TENANT_SETTINGS" },
 ];
@@ -74,6 +75,7 @@ const SUPER_ADMIN_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/super/dashboard", icon: LayoutDashboard, alwaysShow: true },
   { label: "Schools",   path: "/super/tenants",   icon: Building2,       alwaysShow: true },
   { label: "Users",     path: "/super/users",     icon: Users,           alwaysShow: true },
+  { label: "Analytics", path: "/super/analytics", icon: BarChart2,       alwaysShow: true },
 ];
 
 const SHARED_ITEMS: NavItem[] = [

@@ -21,7 +21,7 @@ export const ALL_PERMISSIONS: Permission[] = [
 export function hasPermission(user: User | null, permission: Permission): boolean {
   if (!user) return false;
   if (user.isSuperAdmin) return true;
-  return user.role?.permissions.includes(permission) ?? false;
+  return user.role?.permissions?.includes(permission) ?? false;
 }
 
 export function hasAnyPermission(user: User | null, permissions: Permission[]): boolean {

@@ -65,6 +65,7 @@ export const router = createBrowserRouter([
               { path: "/super/tenants", element: L(() => import("@/pages/super/Tenants")) },
               { path: "/super/tenants/:id", element: L(() => import("@/pages/super/TenantDetail")) },
               { path: "/super/users", element: L(() => import("@/pages/super/Users")) },
+              { path: "/super/analytics", element: L(() => import("@/pages/super/Analytics")) },
             ],
           },
 
@@ -97,6 +98,9 @@ export const router = createBrowserRouter([
               { path: "/course-enrollments", element: L(() => import("@/pages/admin/CourseEnrollments")) },
             ],
           },
+
+          // Analytics (admin)
+          { path: "/analytics", element: L(() => import("@/pages/shared/AnalyticsPage")) },
 
           // Lessons
           { path: "/lessons", element: L(() => import("@/pages/shared/LessonsPage")) },
