@@ -25,9 +25,11 @@ export interface Role {
 export interface CreateRoleDto {
   name: string;
   permissions: Permission[];
+  isDefault?: boolean;
 }
 
 export interface UpdateRoleDto {
   name?: string;
   permissions?: Permission[];
+  isDefault?: boolean;
 }

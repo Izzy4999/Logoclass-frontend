@@ -4,6 +4,7 @@ import { ProtectedRoute, GuestRoute, ForcePasswordChangeRoute, SuperAdminRoute, 
 import AppShell from "@/components/layout/AppShell";
 import AuthLayout from "@/components/layout/AuthLayout";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import RouteError from "@/components/shared/RouteError";
 
 const L = (factory: () => Promise<{ default: React.ComponentType }>) => {
   const Comp = lazy(factory);
@@ -18,6 +19,7 @@ export const router = createBrowserRouter([
   // ─── Guest routes ────────────────────────────────────────────────────────────
   {
     element: <GuestRoute />,
+    errorElement: <RouteError />,
     children: [
       {
         element: <AuthLayout />,
@@ -34,6 +36,7 @@ export const router = createBrowserRouter([
   // ─── Force password change ──────────────────────────────────────────────────
   {
     element: <ForcePasswordChangeRoute />,
+    errorElement: <RouteError />,
     children: [
       {
         element: <AuthLayout />,
@@ -47,9 +50,11 @@ export const router = createBrowserRouter([
   // ─── Protected routes ────────────────────────────────────────────────────────
   {
     element: <ProtectedRoute />,
+    errorElement: <RouteError />,
     children: [
       {
         element: <AppShell />,
+        errorElement: <RouteError />,
         children: [
           { path: "/dashboard", element: L(() => import("@/pages/shared/Dashboard")) },
           { path: "/profile", element: L(() => import("@/pages/shared/Profile")) },
