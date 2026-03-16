@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Edit2, Trash2, Loader2, DollarSign, Users } from "lucide-react";
+import { Plus, Edit2, Trash2, Loader2, DollarSign, Users, CreditCard, ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import PageHeader from "@/components/shared/PageHeader";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import Modal from "@/components/shared/Modal";
@@ -9,7 +10,8 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { paymentsApi } from "@/api/payments";
 import { formatDate } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
-import type { Fee, FeeCategory } from "@/types/payment";
+import { toast } from "@/lib/toast";
+import type { Fee, FeeAssignment, FeeCategory } from "@/types/payment";
 
 const CATEGORIES = ["SCHOOL_FEES", "EXAM_FEES", "UNIFORM", "BOOK_FEES", "OTHER"];
 const INIT_FEE = { name: "", description: "", amount: "", category: "SCHOOL_FEES", dueDate: "", isActive: true };
@@ -19,10 +21,117 @@ function formatNGN(amount: number) {
   return new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", minimumFractionDigits: 0 }).format(amount);
 }
 
+// ── Student My Fees view ──────────────────────────────────────────────────────
+function MyFeesTab() {
+  const [initiatingId, setInitiatingId] = useState<string | null>(null);
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["my-fees"],
+    queryFn: () => paymentsApi.getMyFees(),
+  });
+
+  const fees: FeeAssignment[] = (data?.data as any)?.data ?? data?.data ?? [];
+
+  const initiateMut = useMutation({
+    mutationFn: (feeAssignmentId: string) => paymentsApi.initiate(feeAssignmentId),
+    onMutate: (id) => setInitiatingId(id),
+    onSettled: () => setInitiatingId(null),
+    onSuccess: (res) => {
+      const paymentUrl = res.data?.data?.paymentUrl;
+      if (paymentUrl) {
+        window.location.href = paymentUrl;
+      } else {
+        toast.error("No payment URL returned", "Please contact the school office.");
+        refetch();
+      }
+    },
+    onError: () => toast.error("Could not initiate payment", "Please try again or contact support."),
+  });
+
+  if (isLoading) return <LoadingSpinner />;
+
+  if (!fees.length) {
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 p-12 flex flex-col items-center gap-3">
+        <div className="h-14 w-14 rounded-full bg-green-50 flex items-center justify-center">
+          <DollarSign className="h-7 w-7 text-green-600" />
+        </div>
+        <p className="font-semibold text-foreground">No fees assigned</p>
+        <p className="text-sm text-muted-foreground">You have no outstanding fees at this time.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 border-b border-slate-200">
+          <tr>
+            {["Fee", "Amount", "Due Date", "Status", "Action"].map(h => (
+              <th key={h} className="text-left px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {fees.map((fa, i) => (
+            <motion.tr
+              key={fa.id}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.04 }}
+              className="hover:bg-slate-50"
+            >
+              <td className="px-4 py-3 font-medium">{fa.fee.name}</td>
+              <td className="px-4 py-3 font-semibold">
+                ₦{Number(fa.amountOverride ?? fa.fee.amount).toLocaleString()}
+              </td>
+              <td className="px-4 py-3 text-muted-foreground">
+                {(fa.dueDate ?? fa.fee.dueDate) ? formatDate((fa.dueDate ?? fa.fee.dueDate)!) : "—"}
+              </td>
+              <td className="px-4 py-3">
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  fa.status === "PAID"    ? "bg-green-100 text-green-700" :
+                  fa.status === "PENDING" ? "bg-yellow-100 text-yellow-700" :
+                  fa.status === "FAILED"  ? "bg-red-100 text-red-700" :
+                  "bg-slate-100 text-slate-600"
+                }`}>{fa.status}</span>
+              </td>
+              <td className="px-4 py-3">
+                {fa.status === "PENDING" ? (
+                  <motion.button
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => initiateMut.mutate(fa.id)}
+                    disabled={initiatingId === fa.id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-60"
+                  >
+                    {initiatingId === fa.id
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : <ExternalLink className="h-3 w-3" />
+                    }
+                    Pay Online
+                  </motion.button>
+                ) : fa.status === "PAID" ? (
+                  <span className="text-xs text-green-600 font-medium">✓ Paid {fa.paidAt ? formatDate(fa.paidAt) : ""}</span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">{fa.status}</span>
+                )}
+              </td>
+            </motion.tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
 export default function FeesPage() {
   const qc = useQueryClient();
   const { can } = useAuth();
   const canManage = can("MANAGE_PAYMENTS");
+
+  const [activeTab, setActiveTab] = useState<"manage" | "my-fees">(canManage ? "manage" : "my-fees");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Fee | null>(null);
@@ -151,8 +260,42 @@ export default function FeesPage() {
     </div>
   );
 
+  // if user cannot manage payments, show only their own fees
+  if (!canManage) {
+    return (
+      <div>
+        <PageHeader title="My Fees" description="View and pay your outstanding fees" />
+        <MyFeesTab />
+      </div>
+    );
+  }
+
   return (
     <div>
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-slate-200 mb-5">
+        {([
+          { key: "manage",  label: "Manage Fees" },
+          { key: "my-fees", label: "My Fees" },
+        ] as const).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              activeTab === tab.key
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "my-fees" && <MyFeesTab />}
+
+      {activeTab === "manage" && (
+      <div>
       <PageHeader
         title="Fees"
         description="Manage school fees and assign them to students"
@@ -291,6 +434,8 @@ export default function FeesPage() {
         message={`Delete fee "${deleteTarget?.name}"? Any unpaid assignments will also be affected.`}
         confirmLabel="Delete"
       />
+      </div>
+      )}
     </div>
   );
 }

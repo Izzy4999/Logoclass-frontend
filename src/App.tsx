@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { router } from "@/router";
 import { bootstrapAuth } from "@/lib/bootstrap";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import Toaster from "@/components/ui/Toaster";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,6 +28,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
+      <Toaster />
     </QueryClientProvider>
   );
 }

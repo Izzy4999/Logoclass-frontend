@@ -136,6 +136,7 @@ export const router = createBrowserRouter([
           // Payments
           { path: "/fees", element: L(() => import("@/pages/shared/FeesPage")) },
           { path: "/payments", element: L(() => import("@/pages/shared/PaymentsPage")) },
+          { path: "/payments/callback", element: L(() => import("@/pages/shared/PaymentCallback")) },
 
           // Admin-only
           {

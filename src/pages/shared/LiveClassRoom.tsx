@@ -1,16 +1,31 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   ChevronLeft, Video, Users, Clock, ExternalLink,
-  Wifi, WifiOff, Calendar, BookOpen, Loader2,
+  Wifi, WifiOff, Calendar, BookOpen, Loader2, Maximize2, X,
 } from "lucide-react";
+import {
+  LiveKitRoom,
+  VideoConference,
+  ControlBar,
+  GridLayout,
+  ParticipantTile,
+  RoomAudioRenderer,
+  useTracks,
+} from "@livekit/components-react";
+import { Track } from "livekit-client";
 import PageHeader from "@/components/shared/PageHeader";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { liveClassesApi } from "@/api/live-classes";
 import { formatDate } from "@/lib/utils";
 
-// ── Helper ────────────────────────────────────────────────────────────────────
+// LiveKit server URL — set VITE_LIVEKIT_URL in .env.local
+// e.g. VITE_LIVEKIT_URL=wss://your-livekit-server.io
+const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL as string | undefined;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function InfoRow({ icon: Icon, label, value }: {
   icon: React.ElementType; label: string; value: React.ReactNode;
 }) {
@@ -27,7 +42,6 @@ function InfoRow({ icon: Icon, label, value }: {
   );
 }
 
-// ── Status badge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status?: string }) {
   if (!status) return null;
   const map: Record<string, string> = {
@@ -35,9 +49,8 @@ function StatusBadge({ status }: { status?: string }) {
     SCHEDULED: "bg-blue-100 text-blue-700 border border-blue-200",
     ENDED:     "bg-slate-100 text-slate-500 border border-slate-200",
   };
-  const cls = map[status] ?? "bg-slate-100 text-slate-500";
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${cls}`}>
+    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${map[status] ?? "bg-slate-100 text-slate-500"}`}>
       {status === "LIVE" && (
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75" />
@@ -49,9 +62,43 @@ function StatusBadge({ status }: { status?: string }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── In-app LiveKit room ───────────────────────────────────────────────────────
+function InAppRoom({ token, onLeave }: { token: string; onLeave: () => void }) {
+  const serverUrl = LIVEKIT_URL;
+
+  if (!serverUrl) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-6">
+        <WifiOff className="h-10 w-10 text-muted-foreground/40 mb-3" />
+        <p className="text-sm font-medium text-foreground mb-1">LiveKit server not configured</p>
+        <p className="text-xs text-muted-foreground">
+          Set <code className="bg-slate-100 px-1 rounded">VITE_LIVEKIT_URL</code> in your <code className="bg-slate-100 px-1 rounded">.env.local</code> to enable in-app video.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <LiveKitRoom
+      serverUrl={serverUrl}
+      token={token}
+      connect
+      video
+      audio
+      onDisconnected={onLeave}
+      style={{ height: "100%", borderRadius: 12 }}
+    >
+      <VideoConference />
+      <RoomAudioRenderer />
+    </LiveKitRoom>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function LiveClassRoom() {
   const { id } = useParams<{ id: string }>();
+  const [joined, setJoined] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const { data: classData, isLoading: classLoading } = useQuery({
     queryKey: ["live-classes", id],
@@ -75,6 +122,32 @@ export default function LiveClassRoom() {
 
   if (classLoading) return <LoadingSpinner />;
 
+  // ── Fullscreen in-app room ────────────────────────────────────────────────
+  if (joined && joinInfo?.token) {
+    return (
+      <div className={`${expanded ? "fixed inset-0 z-50" : "relative"} bg-slate-900 rounded-xl overflow-hidden`}
+        style={{ height: expanded ? "100vh" : "80vh" }}
+      >
+        <div className="absolute top-3 right-3 z-10 flex gap-2">
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+            title={expanded ? "Exit fullscreen" : "Fullscreen"}
+          >
+            {expanded ? <X className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
+          <button
+            onClick={() => setJoined(false)}
+            className="px-3 py-1.5 rounded-lg bg-red-500/80 hover:bg-red-600 text-white text-xs font-medium"
+          >
+            Leave Class
+          </button>
+        </div>
+        <InAppRoom token={joinInfo.token} onLeave={() => setJoined(false)} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
@@ -91,7 +164,7 @@ export default function LiveClassRoom() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {/* ── Class details panel ───────────────────────────────────────── */}
+        {/* Details panel */}
         <motion.div
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
@@ -106,57 +179,28 @@ export default function LiveClassRoom() {
           </div>
 
           <div className="space-y-0.5">
-            <InfoRow
-              icon={BookOpen}
-              label="Title"
-              value={liveClass?.title ?? "—"}
-            />
+            <InfoRow icon={BookOpen} label="Title" value={liveClass?.title ?? "—"} />
             {(liveClass as any)?.subject?.name && (
-              <InfoRow
-                icon={BookOpen}
-                label="Subject"
-                value={(liveClass as any).subject.name}
-              />
+              <InfoRow icon={BookOpen} label="Subject" value={(liveClass as any).subject.name} />
             )}
             {(liveClass as any)?.class?.name && (
-              <InfoRow
-                icon={Users}
-                label="Class"
-                value={(liveClass as any).class.name}
-              />
+              <InfoRow icon={Users} label="Class" value={(liveClass as any).class.name} />
             )}
             {(liveClass as any)?.teacher && (
-              <InfoRow
-                icon={Video}
-                label="Teacher"
+              <InfoRow icon={Video} label="Teacher"
                 value={`${(liveClass as any).teacher.firstName} ${(liveClass as any).teacher.lastName}`}
               />
             )}
             {liveClass?.scheduledAt && (
-              <InfoRow
-                icon={Calendar}
-                label="Scheduled"
-                value={formatDate(liveClass.scheduledAt)}
-              />
+              <InfoRow icon={Calendar} label="Scheduled" value={formatDate(liveClass.scheduledAt)} />
             )}
             {liveClass?.duration && (
-              <InfoRow
-                icon={Clock}
-                label="Duration"
-                value={`${liveClass.duration} minutes`}
-              />
-            )}
-            {(liveClass as any)?.participants !== undefined && (
-              <InfoRow
-                icon={Users}
-                label="Participants"
-                value={(liveClass as any).participants}
-              />
+              <InfoRow icon={Clock} label="Duration" value={`${liveClass.duration} minutes`} />
             )}
           </div>
         </motion.div>
 
-        {/* ── Join panel ────────────────────────────────────────────────── */}
+        {/* Join / room panel */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -173,7 +217,6 @@ export default function LiveClassRoom() {
               <p className="text-sm text-muted-foreground">Connecting to room…</p>
             </div>
           ) : joinInfo ? (
-            /* ── Room is live ───────────────────────────────────────── */
             <div className="flex flex-col items-center text-center py-8 px-4">
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
@@ -181,7 +224,6 @@ export default function LiveClassRoom() {
                 transition={{ type: "spring", stiffness: 260, damping: 20 }}
                 className="relative mb-6"
               >
-                {/* Pulsing ring */}
                 <span className="absolute inset-0 rounded-full bg-green-400 opacity-20 animate-ping" />
                 <div className="relative h-20 w-20 rounded-full bg-green-50 border-2 border-green-200 flex items-center justify-center">
                   <Wifi className="h-9 w-9 text-green-600" />
@@ -189,37 +231,43 @@ export default function LiveClassRoom() {
               </motion.div>
 
               <h2 className="text-xl font-bold text-foreground mb-1">Room is Live</h2>
-              <p className="text-sm text-muted-foreground mb-1">
+              <p className="text-sm text-muted-foreground mb-6">
                 Room: <span className="font-mono font-semibold text-foreground">{joinInfo.roomName}</span>
               </p>
-              <p className="text-xs text-muted-foreground mb-6">
-                Your session token is ready. Click below to enter the room.
-              </p>
 
-              {joinInfo.url ? (
-                <motion.a
-                  href={joinInfo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  whileHover={{ scale: 1.04, boxShadow: "0 8px 24px rgba(34,197,94,0.25)" }}
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* In-app join (requires VITE_LIVEKIT_URL) */}
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.97 }}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm"
+                  onClick={() => setJoined(true)}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 text-white text-sm font-semibold rounded-xl shadow-sm"
                 >
-                  <ExternalLink className="h-4 w-4" /> Join Class Now
-                </motion.a>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  No room URL returned — the LiveKit embed will appear here.
+                  <Video className="h-4 w-4" /> Join In-App
+                </motion.button>
+
+                {/* External fallback */}
+                {joinInfo.url && (
+                  <motion.a
+                    href={joinInfo.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 border border-slate-200 text-foreground text-sm font-semibold rounded-xl hover:bg-slate-50"
+                  >
+                    <ExternalLink className="h-4 w-4" /> Open in Browser
+                  </motion.a>
+                )}
+              </div>
+
+              {!LIVEKIT_URL && (
+                <p className="text-xs text-muted-foreground mt-5 bg-amber-50 border border-amber-100 px-3 py-2 rounded-lg">
+                  <strong>Note:</strong> In-app video requires <code>VITE_LIVEKIT_URL</code> to be set. Use "Open in Browser" as a fallback.
                 </p>
               )}
-
-              <div className="mt-8 p-4 bg-slate-50 rounded-xl text-xs text-muted-foreground text-left w-full max-w-sm">
-                <p className="font-semibold text-foreground mb-1">LiveKit Integration</p>
-                <p>Embed the <code className="bg-white px-1 rounded">@livekit/components-react</code> room component here for a fully in-app experience.</p>
-              </div>
             </div>
           ) : (
-            /* ── Not live yet ───────────────────────────────────────── */
             <div className="flex flex-col items-center text-center py-10 px-4">
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
@@ -233,7 +281,7 @@ export default function LiveClassRoom() {
               <h2 className="text-xl font-bold text-foreground mb-1">Not Live Yet</h2>
               <p className="text-sm text-muted-foreground mb-4 max-w-xs">
                 {joinError
-                  ? "This class hasn't started yet or you don't have access. Please check back at the scheduled time."
+                  ? "This class hasn't started yet or you don't have access."
                   : "The class room isn't active. It will become available when the teacher starts the session."}
               </p>
 
@@ -243,10 +291,6 @@ export default function LiveClassRoom() {
                   Scheduled for {formatDate(liveClass.scheduledAt)}
                 </div>
               )}
-
-              <p className="text-xs text-muted-foreground mt-6">
-                The page will automatically update when the room goes live. You can also refresh manually.
-              </p>
             </div>
           )}
         </motion.div>
