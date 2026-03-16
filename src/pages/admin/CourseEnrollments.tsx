@@ -6,9 +6,12 @@ import PageHeader from "@/components/shared/PageHeader";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import Modal from "@/components/shared/Modal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import InfiniteSelect from "@/components/shared/InfiniteSelect";
 import { courseEnrollmentsApi, subjectsApi, academicYearsApi } from "@/api/classes";
 import { usersApi } from "@/api/users";
 import type { CourseEnrollment } from "@/types/class";
+import type { User } from "@/types/user";
+import type { Subject } from "@/types/class";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_COLORS: Record<string, string> = {
@@ -28,45 +31,43 @@ function apiErr(e: unknown) {
   return (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Something went wrong";
 }
 
+// ── InfiniteSelect fetchers (max 100 per page) ────────────────────────────────
+const usersFetcher = ({ page, search }: { page: number; search: string }) =>
+  usersApi.list({ page, limit: 100, search: search || undefined })
+    .then(r => ({ data: r.data.data, meta: r.data.meta }));
+
+const subjectsFetcher = ({ page, search }: { page: number; search: string }) =>
+  subjectsApi.list({ page, limit: 100, search: search || undefined })
+    .then(r => ({ data: r.data.data, meta: r.data.meta }));
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function CourseEnrollments() {
   const qc = useQueryClient();
 
-  // filters
-  const [page, setPage] = useState(1);
+  // table filters / pagination
+  const [page, setPage]           = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
 
   // modals
-  const [createOpen, setCreateOpen]   = useState(false);
-  const [editTarget,  setEditTarget]  = useState<CourseEnrollment | null>(null);
+  const [createOpen,   setCreateOpen]   = useState(false);
+  const [editTarget,   setEditTarget]   = useState<CourseEnrollment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CourseEnrollment | null>(null);
 
   // forms
-  const [createForm, setCreateForm]   = useState(INIT_CREATE);
-  const [editForm,   setEditForm]     = useState(INIT_EDIT);
-  const [formErr,    setFormErr]      = useState("");
+  const [createForm, setCreateForm] = useState(INIT_CREATE);
+  const [editForm,   setEditForm]   = useState(INIT_EDIT);
+  const [formErr,    setFormErr]    = useState("");
 
-  // ── Queries ─────────────────────────────────────────────────────────────────
+  // ── Table query ──────────────────────────────────────────────────────────────
   const { data, isLoading } = useQuery({
     queryKey: ["course-enrollments", page, statusFilter],
     queryFn: () => courseEnrollmentsApi.list({ page, limit: 20, status: statusFilter || undefined }),
   });
 
-  const { data: usersData } = useQuery({
-    queryKey: ["users-students"],
-    queryFn: () => usersApi.list({ limit: 200 }),
-    enabled: createOpen,
-  });
-
-  const { data: subjectsData } = useQuery({
-    queryKey: ["subjects-all"],
-    queryFn: () => subjectsApi.list({ limit: 200 }),
-    enabled: createOpen,
-  });
-
+  // ── Academic years + terms (small lists — regular query, capped at 100) ──────
   const { data: yearsData } = useQuery({
-    queryKey: ["academic-years-all"],
-    queryFn: () => academicYearsApi.list({ limit: 50 }),
+    queryKey: ["academic-years-select"],
+    queryFn: () => academicYearsApi.list({ limit: 100 }),
     enabled: createOpen,
   });
 
@@ -77,11 +78,9 @@ export default function CourseEnrollments() {
   });
 
   const enrollments: CourseEnrollment[] = data?.data?.data ?? [];
-  const meta = data?.data?.meta;
-  const users    = usersData?.data?.data ?? [];
-  const subjects = subjectsData?.data?.data ?? [];
-  const years    = yearsData?.data?.data ?? [];
-  const terms    = (termsData?.data as any)?.data ?? termsData?.data ?? [];
+  const meta  = data?.data?.meta;
+  const years = yearsData?.data?.data ?? [];
+  const terms = (termsData?.data as any)?.data ?? termsData?.data ?? [];
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["course-enrollments"] });
 
@@ -113,7 +112,7 @@ export default function CourseEnrollments() {
     onSuccess: () => { setDeleteTarget(null); invalidate(); },
   });
 
-  // ── Open edit ─────────────────────────────────────────────────────────────────
+  // ── Open edit helper ──────────────────────────────────────────────────────────
   const openEdit = (e: CourseEnrollment) => {
     setEditTarget(e);
     setEditForm({
@@ -164,7 +163,9 @@ export default function CourseEnrollments() {
         </div>
       ) : (
         <>
-          <p className="text-xs text-muted-foreground mb-2">{meta?.total ?? enrollments.length} enrollment{(meta?.total ?? enrollments.length) !== 1 ? "s" : ""}</p>
+          <p className="text-xs text-muted-foreground mb-2">
+            {meta?.total ?? enrollments.length} enrollment{(meta?.total ?? enrollments.length) !== 1 ? "s" : ""}
+          </p>
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
@@ -199,18 +200,12 @@ export default function CourseEnrollments() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => openEdit(e)}
-                          className="p-1.5 rounded text-muted-foreground hover:bg-slate-100"
-                          title="Edit score/grade/status"
-                        >
+                        <button onClick={() => openEdit(e)}
+                          className="p-1.5 rounded text-muted-foreground hover:bg-slate-100" title="Edit">
                           <Edit2 className="h-3.5 w-3.5" />
                         </button>
-                        <button
-                          onClick={() => setDeleteTarget(e)}
-                          className="p-1.5 rounded text-red-500 hover:bg-red-50"
-                          title="Remove enrollment"
-                        >
+                        <button onClick={() => setDeleteTarget(e)}
+                          className="p-1.5 rounded text-red-500 hover:bg-red-50" title="Remove">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -244,34 +239,39 @@ export default function CourseEnrollments() {
         <div className="space-y-3">
           {formErr && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{formErr}</p>}
 
+          {/* Student — infinite scroll */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground">Student *</label>
-            <select
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Student *</label>
+            <InfiniteSelect<User>
               value={createForm.studentId}
-              onChange={e => setCreateForm(f => ({ ...f, studentId: e.target.value }))}
-              className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-            >
-              <option value="">— Select student —</option>
-              {users.map(u => (
-                <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email})</option>
-              ))}
-            </select>
+              onChange={(id) => setCreateForm(f => ({ ...f, studentId: id }))}
+              placeholder="Search and select student…"
+              queryKey={["users", "infinite-select"]}
+              fetcher={usersFetcher}
+              getLabel={(u) => `${u.firstName} ${u.lastName}`}
+              getValue={(u) => u.id}
+              getSublabel={(u) => u.email}
+              enabled={createOpen}
+            />
           </div>
 
+          {/* Subject — infinite scroll */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground">Subject *</label>
-            <select
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Subject *</label>
+            <InfiniteSelect<Subject>
               value={createForm.subjectId}
-              onChange={e => setCreateForm(f => ({ ...f, subjectId: e.target.value }))}
-              className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-            >
-              <option value="">— Select subject —</option>
-              {subjects.map(s => (
-                <option key={s.id} value={s.id}>{s.name}{s.code ? ` (${s.code})` : ""}</option>
-              ))}
-            </select>
+              onChange={(id) => setCreateForm(f => ({ ...f, subjectId: id }))}
+              placeholder="Search and select subject…"
+              queryKey={["subjects", "infinite-select"]}
+              fetcher={subjectsFetcher}
+              getLabel={(s) => s.name}
+              getValue={(s) => s.id}
+              getSublabel={(s) => s.code ? `Code: ${s.code}` : (s.gradeLevel?.name ?? "")}
+              enabled={createOpen}
+            />
           </div>
 
+          {/* Academic Year + Term — small lists, regular select */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground">Academic Year *</label>
@@ -336,8 +336,7 @@ export default function CourseEnrollments() {
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Score (0–100)</label>
-                <input
-                  type="number" min="0" max="100"
+                <input type="number" min="0" max="100"
                   value={editForm.score}
                   onChange={e => setEditForm(f => ({ ...f, score: e.target.value }))}
                   placeholder="e.g. 75"
@@ -346,31 +345,25 @@ export default function CourseEnrollments() {
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Grade</label>
-                <select
-                  value={editForm.grade}
+                <select value={editForm.grade}
                   onChange={e => setEditForm(f => ({ ...f, grade: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                >
+                  className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                   <option value="">— Grade —</option>
                   {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Status</label>
-                <select
-                  value={editForm.status}
+                <select value={editForm.status}
                   onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                >
+                  className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                   {STATUSES.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
                 </select>
               </div>
             </div>
 
             <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={editForm.isCarryover}
+              <input type="checkbox" checked={editForm.isCarryover}
                 onChange={e => setEditForm(f => ({ ...f, isCarryover: e.target.checked }))}
                 className="rounded border-slate-300 text-primary"
               />
@@ -382,11 +375,8 @@ export default function CourseEnrollments() {
                 className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg text-muted-foreground hover:bg-slate-50">
                 Cancel
               </button>
-              <button
-                onClick={() => editMut.mutate()}
-                disabled={editMut.isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
-              >
+              <button onClick={() => editMut.mutate()} disabled={editMut.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50">
                 {editMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save Changes
               </button>
             </div>
