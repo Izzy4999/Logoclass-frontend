@@ -1,20 +1,9 @@
 /**
  * InfiniteSelect — searchable dropdown with infinite scroll.
- *
- * Usage:
- *   <InfiniteSelect
- *     value={selectedId}
- *     onChange={setSelectedId}
- *     placeholder="Select student"
- *     queryKey={["users", "infinite"]}
- *     fetcher={({ page, search }) =>
- *       usersApi.list({ page, limit: 100, search }).then(r => r.data)
- *     }
- *     getLabel={u => `${u.firstName} ${u.lastName}`}
- *     getValue={u => u.id}
- *   />
+ * Renders the dropdown via a portal so it floats above modals.
  */
 import { useRef, useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, ChevronDown, Check, Loader2, X } from "lucide-react";
@@ -30,13 +19,10 @@ interface InfiniteSelectProps<T> {
   value: string;
   onChange: (value: string, item?: T) => void;
   placeholder?: string;
-  /** Stable array used as React Query key — include anything that changes the data set */
   queryKey: unknown[];
-  /** Must return { data: T[], meta: { totalPages, page, ... } } */
   fetcher: (params: { page: number; search: string }) => Promise<FetcherResult<T>>;
   getLabel: (item: T) => string;
   getValue: (item: T) => string;
-  /** Optional second line shown in each option */
   getSublabel?: (item: T) => string;
   enabled?: boolean;
   disabled?: boolean;
@@ -57,12 +43,14 @@ export default function InfiniteSelect<T>({
   disabled = false,
   className = "",
 }: InfiniteSelectProps<T>) {
-  const [open,   setOpen]   = useState(false);
+  const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const containerRef  = useRef<HTMLDivElement>(null);
-  const searchRef     = useRef<HTMLInputElement>(null);
-  const sentinelRef   = useRef<HTMLDivElement>(null);
-  const listRef       = useRef<HTMLUListElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   // ── Infinite query ───────────────────────────────────────────────────────────
   const {
@@ -83,6 +71,29 @@ export default function InfiniteSelect<T>({
 
   const allItems: T[] = data?.pages.flatMap((p) => p.data) ?? [];
 
+  // ── Position the dropdown relative to trigger ──────────────────────────────
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setDropdownStyle({
+      position: "fixed",
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open, updatePosition]);
+
   // ── IntersectionObserver sentinel ────────────────────────────────────────────
   useEffect(() => {
     const el = sentinelRef.current;
@@ -99,7 +110,13 @@ export default function InfiniteSelect<T>({
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (
+        !triggerRef.current?.contains(target) &&
+        !dropdownRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -126,10 +143,93 @@ export default function InfiniteSelect<T>({
     onChange("", undefined);
   };
 
+  // ── Dropdown content (rendered via portal) ──────────────────────────────────
+  const dropdown = (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          ref={dropdownRef}
+          initial={{ opacity: 0, y: -4, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -4, scale: 0.98 }}
+          transition={{ duration: 0.15, ease: "easeOut" }}
+          style={dropdownStyle}
+          className="z-[9999] bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden"
+        >
+          {/* Search input */}
+          <div className="p-2 border-b border-slate-100">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search…"
+                className="w-full pl-8 pr-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+          </div>
+
+          {/* Options list */}
+          <ul ref={listRef} className="max-h-52 overflow-y-auto py-1">
+            {isLoading ? (
+              <li className="flex items-center justify-center py-6 gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+              </li>
+            ) : allItems.length === 0 ? (
+              <li className="py-6 text-center text-sm text-muted-foreground">
+                No results found
+              </li>
+            ) : (
+              <>
+                {allItems.map((item) => {
+                  const val = getValue(item);
+                  const label = getLabel(item);
+                  const sublabel = getSublabel?.(item);
+                  const selected = val === value;
+                  return (
+                    <li
+                      key={val}
+                      onClick={() => handleSelect(item)}
+                      className={`flex items-center justify-between px-3 py-2 cursor-pointer text-sm
+                        ${selected
+                          ? "bg-primary/5 text-primary"
+                          : "text-foreground hover:bg-slate-50"
+                        }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{label}</p>
+                        {sublabel && (
+                          <p className="text-xs text-muted-foreground truncate">{sublabel}</p>
+                        )}
+                      </div>
+                      {selected && <Check className="h-3.5 w-3.5 flex-shrink-0 ml-2 text-primary" />}
+                    </li>
+                  );
+                })}
+
+                {/* Sentinel for infinite scroll */}
+                <div ref={sentinelRef} className="h-1" />
+
+                {isFetchingNextPage && (
+                  <li className="flex items-center justify-center py-3 gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading more…
+                  </li>
+                )}
+              </>
+            )}
+          </ul>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
+    <div className={`relative ${className}`}>
       {/* Trigger */}
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
@@ -155,86 +255,8 @@ export default function InfiniteSelect<T>({
         </span>
       </button>
 
-      {/* Dropdown */}
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0,  scale: 1    }}
-            exit={{ opacity: 0, y: -4, scale: 0.98 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden"
-          >
-            {/* Search input */}
-            <div className="p-2 border-b border-slate-100">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <input
-                  ref={searchRef}
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search…"
-                  className="w-full pl-8 pr-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
-              </div>
-            </div>
-
-            {/* Options list */}
-            <ul
-              ref={listRef}
-              className="max-h-52 overflow-y-auto py-1"
-            >
-              {isLoading ? (
-                <li className="flex items-center justify-center py-6 gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-                </li>
-              ) : allItems.length === 0 ? (
-                <li className="py-6 text-center text-sm text-muted-foreground">
-                  No results found
-                </li>
-              ) : (
-                <>
-                  {allItems.map((item) => {
-                    const val      = getValue(item);
-                    const label    = getLabel(item);
-                    const sublabel = getSublabel?.(item);
-                    const selected = val === value;
-                    return (
-                      <li
-                        key={val}
-                        onClick={() => handleSelect(item)}
-                        className={`flex items-center justify-between px-3 py-2 cursor-pointer text-sm
-                          ${selected
-                            ? "bg-primary/5 text-primary"
-                            : "text-foreground hover:bg-slate-50"
-                          }`}
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{label}</p>
-                          {sublabel && (
-                            <p className="text-xs text-muted-foreground truncate">{sublabel}</p>
-                          )}
-                        </div>
-                        {selected && <Check className="h-3.5 w-3.5 flex-shrink-0 ml-2 text-primary" />}
-                      </li>
-                    );
-                  })}
-
-                  {/* Sentinel for infinite scroll */}
-                  <div ref={sentinelRef} className="h-1" />
-
-                  {isFetchingNextPage && (
-                    <li className="flex items-center justify-center py-3 gap-2 text-xs text-muted-foreground">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading more…
-                    </li>
-                  )}
-                </>
-              )}
-            </ul>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Dropdown rendered via portal to escape modal overflow */}
+      {createPortal(dropdown, document.body)}
     </div>
   );
 }
