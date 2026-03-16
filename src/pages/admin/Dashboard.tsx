@@ -73,7 +73,7 @@ export default function AdminDashboard() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" />
               <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis domain={[70, 100]} hide />
-              <Tooltip formatter={(v: number) => [`${v}%`, "Attendance"]} contentStyle={{ fontSize: 11 }} />
+              <Tooltip formatter={(v) => [`${v}%`, "Attendance"]} contentStyle={{ fontSize: 11 }} />
               <Area type="monotone" dataKey="rate" stroke="#1e40af" strokeWidth={2} fill="url(#dashAttGrad)" dot={false} />
             </AreaChart>
           </ResponsiveContainer>
@@ -94,7 +94,7 @@ export default function AdminDashboard() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" />
               <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis hide />
-              <Tooltip formatter={(v: number) => [`₦${(v / 1000).toFixed(0)}K`]} contentStyle={{ fontSize: 11 }} />
+              <Tooltip formatter={(v) => [`₦${(Number(v) / 1000).toFixed(0)}K`]} contentStyle={{ fontSize: 11 }} />
               <Bar dataKey="collected" fill="#22c55e" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>

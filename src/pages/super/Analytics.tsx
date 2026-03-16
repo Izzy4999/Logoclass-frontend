@@ -45,7 +45,7 @@ const CARD_VARIANTS = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({
     opacity: 1, y: 0,
-    transition: { duration: 0.35, delay: i * 0.07, ease: "easeOut" },
+    transition: { duration: 0.35, delay: i * 0.07, ease: "easeOut" as const },
   }),
 };
 
@@ -129,7 +129,7 @@ export default function SuperAnalytics() {
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v: number) => [`${v} schools`]} />
+              <Tooltip formatter={(v) => [`${v} schools`]} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
             </PieChart>
           </ResponsiveContainer>

@@ -18,7 +18,7 @@ const navContainerVariants = {
 };
 const navItemVariants = {
   hidden: { opacity: 0, x: -14 },
-  visible: { opacity: 1, x: 0, transition: { duration: 0.22, ease: "easeOut" } },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.22, ease: "easeOut" as const } },
 };
 
 interface NavItem {

@@ -28,7 +28,7 @@ const CARD_VARIANTS = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({
     opacity: 1, y: 0,
-    transition: { duration: 0.35, delay: i * 0.06, ease: "easeOut" },
+    transition: { duration: 0.35, delay: i * 0.06, ease: "easeOut" as const },
   }),
 };
 
@@ -145,7 +145,7 @@ export default function AnalyticsPage() {
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v: number) => [`${v} users`]} />
+              <Tooltip formatter={(v) => [`${v} users`]} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
             </PieChart>
           </ResponsiveContainer>
@@ -174,9 +174,9 @@ export default function AnalyticsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
               <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} unit="%" />
               <YAxis dataKey="class" type="category" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={52} />
-              <Tooltip formatter={(v: number) => [`${v}%`, "Submission rate"]} />
+              <Tooltip formatter={(v) => [`${v}%`, "Submission rate"]} />
               <Bar dataKey="rate" name="Submission %" fill="#6366f1" radius={[0, 4, 4, 0]}
-                label={{ position: "right", fontSize: 10, fill: "#64748b", formatter: (v: number) => `${v}%` }}
+                label={{ position: "right", fontSize: 10, fill: "#64748b", formatter: (v: unknown) => `${v}%` }}
               />
             </BarChart>
           </ResponsiveContainer>
