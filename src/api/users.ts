@@ -3,7 +3,7 @@ import type { ApiResponse, PaginatedResponse, PaginationParams } from "@/types/a
 import type { User, CreateUserDto, UpdateUserDto } from "@/types/user";
 
 export const usersApi = {
-  list: (params?: PaginationParams & { roleId?: string; isActive?: boolean }) =>
+  list: (params?: PaginationParams & { roleId?: string; isActive?: boolean; tenantId?: string }) =>
     apiClient.get<PaginatedResponse<User>>("/users", { params }),
 
   create: (dto: CreateUserDto) =>

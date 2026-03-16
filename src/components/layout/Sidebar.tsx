@@ -72,7 +72,8 @@ const PARENT_ITEMS: NavItem[] = [
 
 const SUPER_ADMIN_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/super/dashboard", icon: LayoutDashboard, alwaysShow: true },
-  { label: "Schools", path: "/super/tenants", icon: Building2, alwaysShow: true },
+  { label: "Schools",   path: "/super/tenants",   icon: Building2,       alwaysShow: true },
+  { label: "Users",     path: "/super/users",     icon: Users,           alwaysShow: true },
 ];
 
 const SHARED_ITEMS: NavItem[] = [

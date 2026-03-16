@@ -64,6 +64,7 @@ export const router = createBrowserRouter([
               { path: "/super/dashboard", element: L(() => import("@/pages/super/Dashboard")) },
               { path: "/super/tenants", element: L(() => import("@/pages/super/Tenants")) },
               { path: "/super/tenants/:id", element: L(() => import("@/pages/super/TenantDetail")) },
+              { path: "/super/users", element: L(() => import("@/pages/super/Users")) },
             ],
           },
 
