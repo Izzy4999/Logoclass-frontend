@@ -1,0 +1,85 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 216 100% 98%;
+    --foreground: 224 71% 25%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 224 71% 25%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71% 25%;
+
+    --primary: 224 76% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 91% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 214 32% 91%;
+    --muted-foreground: 215 25% 40%;
+
+    --accent: 214 32% 91%;
+    --accent-foreground: 224 71% 25%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 224 76% 40%;
+
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  #root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+@layer components {
+  /* Button press effect */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    @apply transition-transform duration-100;
+  }
+  button:not(:disabled):active,
+  [role="button"]:not(:disabled):active {
+    transform: scale(0.96);
+  }
+
+  /* Input focus smooth transition */
+  input, textarea, select {
+    @apply transition-shadow duration-200;
+  }
+
+  /* Link hover transition */
+  a {
+    @apply transition-opacity duration-150;
+  }
+}
+
+@layer utilities {
+  /* Smooth scrollbar for all overflow-y-auto containers */
+  .overflow-y-auto {
+    scroll-behavior: smooth;
+  }
+}
