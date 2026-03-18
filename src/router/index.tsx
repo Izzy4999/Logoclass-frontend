@@ -99,22 +99,32 @@ export const router = createBrowserRouter([
 
           // Lessons
           { path: "/lessons", element: L(() => import("@/pages/shared/LessonsPage")) },
+          { path: "/lessons/new", element: L(() => import("@/pages/shared/LessonForm")) },
           { path: "/lessons/:id", element: L(() => import("@/pages/shared/LessonDetail")) },
+          { path: "/lessons/:id/edit", element: L(() => import("@/pages/shared/LessonForm")) },
 
           // Live Classes
           { path: "/live-classes", element: L(() => import("@/pages/shared/LiveClassesPage")) },
+          { path: "/live-classes/new", element: L(() => import("@/pages/shared/LiveClassForm")) },
+          { path: "/live-classes/:id/edit", element: L(() => import("@/pages/shared/LiveClassForm")) },
           { path: "/live-classes/:id/room", element: L(() => import("@/pages/shared/LiveClassRoom")) },
 
           // Assignments
           { path: "/assignments", element: L(() => import("@/pages/shared/AssignmentsPage")) },
+          { path: "/assignments/new", element: L(() => import("@/pages/shared/AssignmentForm")) },
           { path: "/assignments/:id", element: L(() => import("@/pages/shared/AssignmentDetail")) },
+          { path: "/assignments/:id/edit", element: L(() => import("@/pages/shared/AssignmentForm")) },
 
           // Quizzes
           { path: "/quizzes", element: L(() => import("@/pages/shared/QuizzesPage")) },
+          { path: "/quizzes/new", element: L(() => import("@/pages/shared/QuizForm")) },
+          { path: "/quizzes/:id/edit", element: L(() => import("@/pages/shared/QuizForm")) },
           { path: "/quizzes/:id/attempt", element: L(() => import("@/pages/student/QuizAttempt")) },
 
           // Exams
           { path: "/exams", element: L(() => import("@/pages/shared/ExamsPage")) },
+          { path: "/exams/new", element: L(() => import("@/pages/shared/ExamForm")) },
+          { path: "/exams/:id/edit", element: L(() => import("@/pages/shared/ExamForm")) },
           { path: "/exams/:id/room", element: L(() => import("@/pages/student/ExamRoom")) },
 
           // Attendance

@@ -1,13 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate } from "react-router-dom";
+import { Edit2, Trash2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { liveClassesApi } from "@/api/live-classes";
 import { formatDateTime } from "@/lib/utils";
 import type { LiveClass } from "@/types/notification";
 
 export default function LiveClassesPage() {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [deleteTarget, setDeleteTarget] = useState<LiveClass | null>(null);
+
   const { data, isLoading } = useQuery({
     queryKey: ["live-classes"],
     queryFn: () => liveClassesApi.list(),
@@ -22,23 +29,24 @@ export default function LiveClassesPage() {
     CANCELLED: "bg-red-100 text-red-700",
   };
 
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => liveClassesApi.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["live-classes"] }); setDeleteTarget(null); },
+  });
+
   return (
     <div className="p-6">
       <PageHeader
         title="Live Classes"
         description="Schedule and manage live class sessions"
         action={
-          <Link
-            to="new"
-            className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90"
-          >
+          <Link to="new" className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90">
             + Schedule Class
           </Link>
         }
       />
 
       {isLoading && <LoadingSpinner />}
-
       {!isLoading && liveClasses.length === 0 && (
         <EmptyState title="No live classes found" description="Schedule your first live class session." />
       )}
@@ -62,23 +70,28 @@ export default function LiveClassesPage() {
                   <td className="px-4 py-3 text-muted-foreground">{formatDateTime(cls.scheduledAt)}</td>
                   <td className="px-4 py-3">{cls.duration ?? "—"}</td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        statusColors[cls.status] ?? "bg-gray-100 text-gray-700"
-                      }`}
-                    >
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[cls.status] ?? "bg-gray-100 text-gray-700"}`}>
                       {cls.status}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {(cls.status === "SCHEDULED" || cls.status === "LIVE") && (
-                      <Link
-                        to={`${cls.id}/room`}
-                        className="inline-flex items-center px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-                      >
-                        Join
-                      </Link>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {(cls.status === "SCHEDULED" || cls.status === "LIVE") && (
+                        <Link to={`${cls.id}/room`} className="inline-flex items-center px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 mr-1">
+                          Join
+                        </Link>
+                      )}
+                      {cls.status === "SCHEDULED" && (
+                        <button onClick={() => navigate(`${cls.id}/edit`)} className="p-1 rounded text-muted-foreground hover:bg-slate-100" title="Edit">
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {cls.status === "SCHEDULED" && (
+                        <button onClick={() => setDeleteTarget(cls)} className="p-1 rounded text-red-500 hover:bg-red-50" title="Delete">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -86,6 +99,16 @@ export default function LiveClassesPage() {
           </table>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteMut.mutate(deleteTarget!.id)}
+        loading={deleteMut.isPending}
+        title="Delete Live Class"
+        message={`Delete "${deleteTarget?.title}"?`}
+        confirmLabel="Delete"
+      />
     </div>
   );
 }
