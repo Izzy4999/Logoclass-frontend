@@ -10,17 +10,19 @@ import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { liveClassesApi } from "@/api/live-classes";
 import { classesApi, academicYearsApi } from "@/api/classes";
+import { lessonsApi } from "@/api/lessons";
 import type { ClassSection, Term, AcademicYear } from "@/types/class";
+import type { Lesson } from "@/types/lesson";
 
 const schema = z.object({
   classId: z.string().min(1, "Class is required"),
   termId: z.string().optional(),
+  lessonId: z.string().optional(),
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
   scheduledAt: z.string().min(1, "Scheduled date is required"),
   duration: z.number().int().min(1).optional(),
   joinUrl: z.string().url("Must be a valid URL").optional().or(z.literal("")),
-  roomName: z.string().optional(),
 });
 type FormData = z.infer<typeof schema>;
 
@@ -32,10 +34,13 @@ export default function LiveClassForm() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [serverError, setServerError] = useState("");
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
+  const selectedClassId = watch("classId");
+
+  // ── Existing record (edit mode) ──────────────────────────────────────────
   const { data: lcData, isLoading: lcLoading } = useQuery({
     queryKey: ["live-classes", id],
     queryFn: () => liveClassesApi.getById(id!),
@@ -43,12 +48,14 @@ export default function LiveClassForm() {
   });
   const lc = lcData?.data?.data;
 
+  // ── Classes ──────────────────────────────────────────────────────────────
   const { data: classesData } = useQuery({
     queryKey: ["classes", { limit: 100 }],
     queryFn: () => classesApi.list({ limit: 100 }),
   });
   const classes: ClassSection[] = classesData?.data?.data ?? [];
 
+  // ── Current academic year → terms ────────────────────────────────────────
   const { data: yearsData } = useQuery({
     queryKey: ["academic-years", { isCurrent: true }],
     queryFn: () => academicYearsApi.list({ isCurrent: true, limit: 5 }),
@@ -62,39 +69,51 @@ export default function LiveClassForm() {
   });
   const terms: Term[] = termsData?.data?.data ?? [];
 
+  // ── Lessons filtered by selected class ───────────────────────────────────
+  const { data: lessonsData } = useQuery({
+    queryKey: ["lessons", { classId: selectedClassId, limit: 100 }],
+    queryFn: () => lessonsApi.list({ classId: selectedClassId!, limit: 100 }),
+    enabled: !!selectedClassId,
+  });
+  const lessons: Lesson[] = lessonsData?.data?.data ?? [];
+
+  // ── Populate form in edit mode ────────────────────────────────────────────
   useEffect(() => {
     if (lc) {
       reset({
         classId: lc.classId,
         termId: lc.termId ?? "",
+        lessonId: lc.lessonId ?? "",
         title: lc.title,
         description: lc.description ?? "",
         scheduledAt: lc.scheduledAt ? lc.scheduledAt.slice(0, 16) : "",
         duration: lc.duration ?? undefined,
         joinUrl: lc.joinUrl ?? "",
-        roomName: lc.roomName ?? "",
       });
     }
   }, [lc, reset]);
 
+  // ── Mutations ─────────────────────────────────────────────────────────────
   const createMut = useMutation({
     mutationFn: (data: FormData) =>
       liveClassesApi.create({
         classId: data.classId,
         termId: data.termId || undefined,
+        lessonId: data.lessonId || undefined,
         title: data.title,
         description: data.description || undefined,
         scheduledAt: data.scheduledAt,
         duration: data.duration,
         joinUrl: data.joinUrl || undefined,
-        roomName: data.roomName || undefined,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["live-classes"] });
       navigate("/live-classes");
     },
     onError: (e: unknown) =>
-      setServerError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to schedule class"),
+      setServerError(
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to schedule class"
+      ),
   });
 
   const updateMut = useMutation({
@@ -103,13 +122,18 @@ export default function LiveClassForm() {
         title: data.title,
         description: data.description || undefined,
         duration: data.duration,
+        scheduledAt: data.scheduledAt,
+        joinUrl: data.joinUrl || undefined,
+        lessonId: data.lessonId || null,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["live-classes"] });
       navigate("/live-classes");
     },
     onError: (e: unknown) =>
-      setServerError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to update class"),
+      setServerError(
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to update class"
+      ),
   });
 
   const deleteMut = useMutation({
@@ -131,7 +155,9 @@ export default function LiveClassForm() {
   if (isEdit && lcLoading) return <LoadingSpinner />;
 
   const inputCls = (hasError: boolean) =>
-    `mt-1 w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${hasError ? "border-destructive" : "border-slate-200"}`;
+    `mt-1 w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white ${
+      hasError ? "border-destructive" : "border-slate-200"
+    }`;
 
   return (
     <div className="p-6 max-w-2xl">
@@ -153,13 +179,14 @@ export default function LiveClassForm() {
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* Class + Term */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-muted-foreground">Class *</label>
               <select
                 {...register("classId")}
                 disabled={isEdit}
-                className={`${inputCls(!!errors.classId)} bg-white ${isEdit ? "opacity-60 cursor-not-allowed" : ""}`}
+                className={`${inputCls(!!errors.classId)} ${isEdit ? "opacity-60 cursor-not-allowed" : ""}`}
               >
                 <option value="">Select class...</option>
                 {classes.map((c) => (
@@ -175,7 +202,7 @@ export default function LiveClassForm() {
               <select
                 {...register("termId")}
                 disabled={isEdit}
-                className={`${inputCls(false)} bg-white ${isEdit ? "opacity-60 cursor-not-allowed" : ""}`}
+                className={`${inputCls(false)} ${isEdit ? "opacity-60 cursor-not-allowed" : ""}`}
               >
                 <option value="">No specific term</option>
                 {terms.map((t) => (
@@ -185,6 +212,33 @@ export default function LiveClassForm() {
             </div>
           </div>
 
+          {/* Lesson picker */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">
+              Linked Lesson{" "}
+              <span className="font-normal text-muted-foreground/70">
+                (optional — links this session to a lesson for students to find the recording)
+              </span>
+            </label>
+            <select
+              {...register("lessonId")}
+              disabled={!selectedClassId}
+              className={`${inputCls(false)} ${!selectedClassId ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              <option value="">No linked lesson</option>
+              {lessons.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.title}
+                  {l.subject ? ` — ${l.subject.name}` : ""}
+                </option>
+              ))}
+            </select>
+            {!selectedClassId && (
+              <p className="text-xs text-muted-foreground/60 mt-1">Select a class first to see its lessons</p>
+            )}
+          </div>
+
+          {/* Title */}
           <div>
             <label className="text-xs font-medium text-muted-foreground">Title *</label>
             <input
@@ -195,6 +249,7 @@ export default function LiveClassForm() {
             {errors.title && <p className="text-xs text-destructive mt-1">{errors.title.message}</p>}
           </div>
 
+          {/* Description */}
           <div>
             <label className="text-xs font-medium text-muted-foreground">Description (optional)</label>
             <textarea
@@ -205,16 +260,18 @@ export default function LiveClassForm() {
             />
           </div>
 
+          {/* Schedule + Duration */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-muted-foreground">Scheduled At *</label>
               <input
                 type="datetime-local"
                 {...register("scheduledAt")}
-                disabled={isEdit}
-                className={`${inputCls(!!errors.scheduledAt)} ${isEdit ? "opacity-60 cursor-not-allowed" : ""}`}
+                className={inputCls(!!errors.scheduledAt)}
               />
-              {errors.scheduledAt && <p className="text-xs text-destructive mt-1">{errors.scheduledAt.message}</p>}
+              {errors.scheduledAt && (
+                <p className="text-xs text-destructive mt-1">{errors.scheduledAt.message}</p>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Duration (minutes, optional)</label>
@@ -228,29 +285,21 @@ export default function LiveClassForm() {
             </div>
           </div>
 
+          {/* Join URL (create only) */}
           {!isEdit && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Join URL (optional)</label>
-                <input
-                  {...register("joinUrl")}
-                  type="url"
-                  placeholder="https://..."
-                  className={inputCls(!!errors.joinUrl)}
-                />
-                {errors.joinUrl && <p className="text-xs text-destructive mt-1">{errors.joinUrl.message}</p>}
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Room Name (optional)</label>
-                <input
-                  {...register("roomName")}
-                  placeholder="e.g. math-class-room-1"
-                  className={inputCls(false)}
-                />
-              </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">External Join URL (optional)</label>
+              <input
+                {...register("joinUrl")}
+                type="url"
+                placeholder="https://zoom.us/j/... (fallback if LiveKit isn't used)"
+                className={inputCls(!!errors.joinUrl)}
+              />
+              {errors.joinUrl && <p className="text-xs text-destructive mt-1">{errors.joinUrl.message}</p>}
             </div>
           )}
 
+          {/* Actions */}
           <div className="flex items-center justify-between pt-2 border-t border-slate-100">
             {isEdit ? (
               <button
@@ -260,7 +309,9 @@ export default function LiveClassForm() {
               >
                 <Trash2 className="h-3.5 w-3.5" /> Delete
               </button>
-            ) : <span />}
+            ) : (
+              <span />
+            )}
             <button
               type="submit"
               disabled={isPending}

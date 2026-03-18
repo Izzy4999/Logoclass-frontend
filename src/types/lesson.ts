@@ -30,11 +30,13 @@ export interface LessonProgress {
 export interface Lesson {
   id: string;
   classId: string;
+  subjectId: string | null;
   termId: string | null;
   title: string;
   description: string | null;
   isPublished: boolean;
   order: number;
+  subject?: { id: string; name: string; code: string | null } | null;
   attachments?: LessonAttachment[];
   attachmentCount?: number;
   quiz?: { id: string; title: string; timeLimit: number | null; questionCount: number } | null;

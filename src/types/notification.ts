@@ -25,6 +25,8 @@ export interface LiveClass {
   id: string;
   classId: string;
   termId: string | null;
+  lessonId: string | null;
+  lesson: { id: string; title: string } | null;
   title: string;
   description: string | null;
   scheduledAt: string;
@@ -35,6 +37,8 @@ export interface LiveClass {
   joinUrl: string | null;
   recordingUrl: string | null;
   duration: number | null;
+  attendeeCount?: number;
+  host?: { id: string; firstName: string; lastName: string; email: string };
   attendance?: {
     id: string;
     user: { id: string; firstName: string; lastName: string };
