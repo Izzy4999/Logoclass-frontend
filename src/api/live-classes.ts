@@ -3,16 +3,16 @@ import type { ApiResponse, PaginatedResponse, PaginationParams } from "@/types/a
 import type { LiveClass } from "@/types/notification";
 
 export const liveClassesApi = {
-  list: (params?: PaginationParams & { classId?: string; status?: string }) =>
+  list: (params?: PaginationParams & { classId?: string; lessonId?: string; status?: string }) =>
     apiClient.get<PaginatedResponse<LiveClass>>("/live-classes", { params }),
 
-  create: (dto: { classId: string; termId?: string; title: string; description?: string; scheduledAt: string; duration?: number; joinUrl?: string; roomName?: string }) =>
+  create: (dto: { classId: string; termId?: string; lessonId?: string; title: string; description?: string; scheduledAt: string; duration?: number; joinUrl?: string; roomName?: string }) =>
     apiClient.post<ApiResponse<LiveClass>>("/live-classes", dto),
 
   getById: (id: string) =>
     apiClient.get<ApiResponse<LiveClass>>(`/live-classes/${id}`),
 
-  update: (id: string, dto: Partial<{ title: string; description: string; duration: number }>) =>
+  update: (id: string, dto: Partial<{ title: string; description: string; duration: number; lessonId: string | null; scheduledAt: string; joinUrl: string }>) =>
     apiClient.patch<ApiResponse<LiveClass>>(`/live-classes/${id}`, dto),
 
   delete: (id: string) =>
