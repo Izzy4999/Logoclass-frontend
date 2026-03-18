@@ -3,16 +3,32 @@ import type { ApiResponse, PaginatedResponse, PaginationParams } from "@/types/a
 import type { Lesson, LessonAttachment, LessonProgress } from "@/types/lesson";
 
 export const lessonsApi = {
-  list: (params?: PaginationParams & { classId?: string; termId?: string }) =>
+  list: (params?: PaginationParams & { classId?: string; subjectId?: string; termId?: string }) =>
     apiClient.get<PaginatedResponse<Lesson>>("/lessons", { params }),
 
-  create: (dto: { classId: string; termId?: string; title: string; description?: string; order?: number; isPublished?: boolean }) =>
+  create: (dto: {
+    classId: string;
+    subjectId?: string;
+    termId?: string;
+    title: string;
+    description?: string;
+    order?: number;
+    isPublished?: boolean;
+    materialIds?: string[];
+  }) =>
     apiClient.post<ApiResponse<Lesson>>("/lessons", dto),
 
   getById: (id: string) =>
     apiClient.get<ApiResponse<Lesson>>(`/lessons/${id}`),
 
-  update: (id: string, dto: Partial<{ title: string; description: string; order: number }>) =>
+  update: (id: string, dto: Partial<{
+    title: string;
+    description: string;
+    subjectId: string;
+    termId: string;
+    order: number;
+    materialIds: string[];
+  }>) =>
     apiClient.patch<ApiResponse<Lesson>>(`/lessons/${id}`, dto),
 
   togglePublish: (id: string) =>
