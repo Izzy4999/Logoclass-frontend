@@ -61,14 +61,14 @@ const STUDENT_ITEMS: NavItem[] = [
   { label: "Quizzes", path: "/quizzes", icon: PenTool, alwaysShow: true },
   { label: "Exams", path: "/exams", icon: FileText, alwaysShow: true },
   { label: "Attendance", path: "/attendance", icon: UserCheck, alwaysShow: true },
-  { label: "Payments", path: "/payments", icon: Wallet, alwaysShow: true },
+  { label: "Fees", path: "/fees", icon: CreditCard, alwaysShow: true },
 ];
 
 const PARENT_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, alwaysShow: true },
   { label: "Attendance", path: "/attendance", icon: UserCheck, alwaysShow: true },
   { label: "Grades", path: "/course-enrollments", icon: BookOpen, alwaysShow: true },
-  { label: "Payments", path: "/payments", icon: Wallet, alwaysShow: true },
+  { label: "Fees", path: "/fees", icon: CreditCard, alwaysShow: true },
 ];
 
 const SUPER_ADMIN_ITEMS: NavItem[] = [

@@ -14,7 +14,7 @@ export const paymentsApi = {
     apiClient.delete<ApiResponse<{ message: string }>>("/payments/config"),
 
   // Fees
-  listFees: (params?: PaginationParams & { classId?: string; termId?: string; isActive?: boolean }) =>
+  listFees: (params?: PaginationParams & { gradeLevelId?: string; academicYearId?: string; termId?: string; category?: string; isActive?: boolean }) =>
     apiClient.get<PaginatedResponse<Fee>>("/fees", { params }),
 
   createFee: (dto: Partial<Fee>) =>
