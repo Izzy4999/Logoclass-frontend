@@ -28,6 +28,8 @@ interface NavItem {
   permission?: Permission;
   superAdminOnly?: boolean;
   alwaysShow?: boolean;
+  /** Feature flag key — item is hidden when this feature is disabled for the tenant */
+  feature?: string;
 }
 
 const ADMIN_ITEMS: NavItem[] = [
@@ -40,14 +42,14 @@ const ADMIN_ITEMS: NavItem[] = [
   { label: "Academic Years", path: "/academic-years", icon: Calendar, permission: "MANAGE_CLASSES" },
   { label: "Enrollments", path: "/enrollments", icon: UserCheck, permission: "MANAGE_CLASSES" },
   { label: "Lessons", path: "/lessons", icon: BookOpen, permission: "MANAGE_LESSONS" },
-  { label: "Live Classes", path: "/live-classes", icon: Video, permission: "MANAGE_LIVE_CLASSES" },
+  { label: "Live Classes", path: "/live-classes", icon: Video, permission: "MANAGE_LIVE_CLASSES", feature: "LIVE_CLASSES" },
   { label: "Assignments", path: "/assignments", icon: ClipboardList, permission: "MANAGE_ASSIGNMENTS" },
-  { label: "Quizzes", path: "/quizzes", icon: PenTool, permission: "MANAGE_QUIZZES" },
+  { label: "Quizzes", path: "/quizzes", icon: PenTool, permission: "MANAGE_QUIZZES", feature: "QUIZZES" },
   { label: "Exams", path: "/exams", icon: FileText, permission: "MANAGE_EXAMS" },
   { label: "Attendance", path: "/attendance", icon: UserCheck, permission: "MARK_ATTENDANCE" },
   { label: "Announcements", path: "/announcements", icon: Megaphone, permission: "CREATE_ANNOUNCEMENT" },
-  { label: "Fees", path: "/fees", icon: CreditCard, permission: "MANAGE_PAYMENTS" },
-  { label: "Payments", path: "/payments", icon: Wallet, permission: "MANAGE_PAYMENTS" },
+  { label: "Fees", path: "/fees", icon: CreditCard, permission: "MANAGE_PAYMENTS", feature: "PAYMENTS" },
+  { label: "Payments", path: "/payments", icon: Wallet, permission: "MANAGE_PAYMENTS", feature: "PAYMENTS" },
   { label: "Analytics", path: "/analytics", icon: BarChart2, alwaysShow: true },
   { label: "Action Logs", path: "/action-logs", icon: ScrollText, permission: "VIEW_ACTION_LOGS" },
   { label: "Settings", path: "/settings", icon: Settings, permission: "MANAGE_TENANT_SETTINGS" },
@@ -56,19 +58,19 @@ const ADMIN_ITEMS: NavItem[] = [
 const STUDENT_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, alwaysShow: true },
   { label: "Lessons", path: "/lessons", icon: BookOpen, alwaysShow: true },
-  { label: "Live Classes", path: "/live-classes", icon: Video, alwaysShow: true },
+  { label: "Live Classes", path: "/live-classes", icon: Video, alwaysShow: true, feature: "LIVE_CLASSES" },
   { label: "Assignments", path: "/assignments", icon: ClipboardList, alwaysShow: true },
-  { label: "Quizzes", path: "/quizzes", icon: PenTool, alwaysShow: true },
+  { label: "Quizzes", path: "/quizzes", icon: PenTool, alwaysShow: true, feature: "QUIZZES" },
   { label: "Exams", path: "/exams", icon: FileText, alwaysShow: true },
   { label: "Attendance", path: "/attendance", icon: UserCheck, alwaysShow: true },
-  { label: "Fees", path: "/fees", icon: CreditCard, alwaysShow: true },
+  { label: "Fees", path: "/fees", icon: CreditCard, alwaysShow: true, feature: "PAYMENTS" },
 ];
 
 const PARENT_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, alwaysShow: true },
   { label: "Attendance", path: "/attendance", icon: UserCheck, alwaysShow: true },
   { label: "Grades", path: "/course-enrollments", icon: BookOpen, alwaysShow: true },
-  { label: "Fees", path: "/fees", icon: CreditCard, alwaysShow: true },
+  { label: "Fees", path: "/fees", icon: CreditCard, alwaysShow: true, feature: "PAYMENTS" },
 ];
 
 const SUPER_ADMIN_ITEMS: NavItem[] = [
@@ -79,8 +81,8 @@ const SUPER_ADMIN_ITEMS: NavItem[] = [
 ];
 
 const SHARED_ITEMS: NavItem[] = [
-  { label: "Messages", path: "/messages", icon: MessageSquare, alwaysShow: true },
-  { label: "Notifications", path: "/notifications", icon: Bell, alwaysShow: true },
+  { label: "Messages", path: "/messages", icon: MessageSquare, alwaysShow: true, feature: "MESSAGING" },
+  { label: "Notifications", path: "/notifications", icon: Bell, alwaysShow: true, feature: "NOTIFICATIONS" },
   { label: "Profile", path: "/profile", icon: User, alwaysShow: true },
 ];
 
@@ -94,6 +96,16 @@ export default function Sidebar() {
     navigate("/login");
   };
 
+  /** Returns true if the feature is enabled for this tenant (or if no feature restriction). */
+  const isFeatureEnabled = (feature?: string): boolean => {
+    if (!feature) return true;
+    if (isSuperAdmin) return true; // super admin sees everything
+    const features = user?.tenant?.features;
+    if (!features) return true; // features not loaded yet — show all
+    const found = features.find((f) => f.feature === feature);
+    return found?.enabled ?? false;
+  };
+
   const getNavItems = (): NavItem[] => {
     if (isSuperAdmin) return SUPER_ADMIN_ITEMS;
     if (isStudent) return STUDENT_ITEMS;
@@ -102,7 +114,9 @@ export default function Sidebar() {
   };
 
   const navItems = getNavItems().filter(
-    (item) => item.alwaysShow || (item.permission && can(item.permission))
+    (item) =>
+      (item.alwaysShow || (item.permission && can(item.permission))) &&
+      isFeatureEnabled(item.feature)
   );
 
   return (
@@ -156,7 +170,7 @@ export default function Sidebar() {
 
         {/* Divider + shared items */}
         <div className="pt-3 mt-3 border-t border-brand-800 space-y-0.5">
-          {SHARED_ITEMS.map((item) => (
+          {SHARED_ITEMS.filter((item) => isFeatureEnabled(item.feature)).map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
