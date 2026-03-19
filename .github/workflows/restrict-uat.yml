@@ -3,7 +3,7 @@ name: Restrict merge source
 on:
   pull_request:
     branches:
-      - main
+      - master
 
 jobs:
   check-source-branch:
