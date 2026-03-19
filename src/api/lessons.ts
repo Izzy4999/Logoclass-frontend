@@ -12,7 +12,6 @@ export const lessonsApi = {
     termId?: string;
     title: string;
     description?: string;
-    order?: number;
     isPublished?: boolean;
     materialIds?: string[];
   }) =>
@@ -26,7 +25,7 @@ export const lessonsApi = {
     description: string;
     subjectId: string;
     termId: string;
-    order: number;
+    isPublished: boolean;
     materialIds: string[];
   }>) =>
     apiClient.patch<ApiResponse<Lesson>>(`/lessons/${id}`, dto),

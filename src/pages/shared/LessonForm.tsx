@@ -5,18 +5,17 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  Loader2, ArrowLeft, Trash2, UploadCloud, X, FileText,
+  ArrowLeft, Trash2, UploadCloud, X, FileText,
   Film, FileSpreadsheet, File, Clock,
 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { lessonsApi } from "@/api/lessons";
-import { uploadsApi } from "@/api/uploads";
 import type { Material } from "@/api/uploads";
 import { classesApi, academicYearsApi, subjectsApi } from "@/api/classes";
 import type { ClassSection, Term, AcademicYear } from "@/types/class";
-import { toast } from "@/lib/toast";
+import { uploadManager } from "@/lib/uploadManager";
 
 // ── Schema ───────────────────────────────────────────────────────────────────
 
@@ -26,7 +25,6 @@ const schema = z.object({
   termId: z.string().optional(),
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
-  order: z.number().int().min(0).optional(),
   isPublished: z.boolean().optional(),
 });
 type FormData = z.infer<typeof schema>;
@@ -72,14 +70,14 @@ export default function LessonForm() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [serverError, setServerError] = useState("");
   const [staged, setStaged] = useState<StagedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  /** Blocks the Submit button only until we hand off to uploadManager */
+  const [submitting, setSubmitting] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { isPublished: false, order: 0 },
+    defaultValues: { isPublished: false },
   });
 
   // ── Queries ────────────────────────────────────────────────────────────────
@@ -126,7 +124,6 @@ export default function LessonForm() {
         termId: (lesson as any).term?.id ?? (lesson as any).termId ?? "",
         title: lesson.title,
         description: lesson.description ?? "",
-        order: lesson.order,
         isPublished: lesson.isPublished,
       });
 
@@ -176,141 +173,47 @@ export default function LessonForm() {
   const removeStaged = (key: string) =>
     setStaged((prev) => prev.filter((s) => s.key !== key));
 
-  // ── Upload all queued files then save the lesson ──────────────────────────
-
-  const createMut = useMutation({
-    mutationFn: (args: { data: FormData; materialIds: string[] }) =>
-      lessonsApi.create({
-        classId: args.data.classId,
-        subjectId: args.data.subjectId || undefined,
-        termId: args.data.termId || undefined,
-        title: args.data.title,
-        description: args.data.description || undefined,
-        order: args.data.order,
-        isPublished: args.data.isPublished,
-        materialIds: args.materialIds.length ? args.materialIds : undefined,
-      }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["lessons"] }); navigate("/lessons"); },
-  });
-
-  const updateMut = useMutation({
-    mutationFn: (args: { data: FormData; materialIds: string[] }) =>
-      lessonsApi.update(id!, {
-        title: args.data.title,
-        description: args.data.description || undefined,
-        subjectId: args.data.subjectId || undefined,
-        termId: args.data.termId || undefined,
-        order: args.data.order,
-        materialIds: args.materialIds.length ? args.materialIds : undefined,
-      }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["lessons"] }); navigate("/lessons"); },
-  });
+  // ── Delete mutation ────────────────────────────────────────────────────────
 
   const deleteMut = useMutation({
     mutationFn: () => lessonsApi.delete(id!),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["lessons"] }); navigate("/lessons"); },
   });
 
-  const onSubmit = async (data: FormData) => {
-    setServerError("");
-    setIsSaving(true);
+  // ── Submit: hand off to uploadManager and navigate immediately ───────────
 
-    // Already-done material IDs (from edit pre-fill)
-    const doneMaterialIds = staged
+  const onSubmit = (data: FormData) => {
+    setSubmitting(true);
+
+    const existingMaterialIds = staged
       .filter((s) => s.status === "done" && s.material?.id)
       .map((s) => s.material!.id);
 
-    // Files that need to be uploaded now
-    const queued = staged.filter((s) => s.status === "queued" && s.file);
+    const pendingFiles = staged
+      .filter((s) => s.status === "queued" && s.file)
+      .map((s) => ({ file: s.file!, name: s.name }));
 
-    // ── Upload queued files with progress toast ──────────────────────────
-    const newMaterialIds: string[] = [];
+    // Capture queryClient reference before navigation unmounts the component
+    const client = qc;
 
-    if (queued.length > 0) {
-      const toastId = toast.progress(
-        `Uploading ${queued.length} file${queued.length > 1 ? "s" : ""}…`,
-      );
+    uploadManager.enqueue({
+      lessonPayload: {
+        lessonId: isEdit ? id! : null,
+        classId: data.classId,
+        subjectId: data.subjectId || undefined,
+        termId: data.termId || undefined,
+        title: data.title,
+        description: data.description || undefined,
+        isPublished: data.isPublished,
+        existingMaterialIds,
+      },
+      pendingFiles,
+      onSaved: () => client.invalidateQueries({ queryKey: ["lessons"] }),
+    });
 
-      let completed = 0;
-      // Per-file progress accumulator for overall %
-      const fileProgress: number[] = queued.map(() => 0);
-
-      const computeOverall = () =>
-        Math.round(fileProgress.reduce((a, b) => a + b, 0) / queued.length);
-
-      const failed: string[] = [];
-
-      // Upload files one-at-a-time to avoid overwhelming the connection
-      for (let i = 0; i < queued.length; i++) {
-        const item = queued[i];
-        try {
-          const res = await uploadsApi.upload(item.file!, (pct) => {
-            fileProgress[i] = pct;
-            toast.update(toastId, {
-              description: `${item.name}`,
-              progress: computeOverall(),
-            });
-          });
-          const material = res.data.data!;
-          newMaterialIds.push(material.id);
-          // Mark done in staged list
-          setStaged((prev) =>
-            prev.map((s) => s.key === item.key ? { ...s, status: "done", material } : s),
-          );
-          fileProgress[i] = 100;
-          completed++;
-          toast.update(toastId, {
-            description: `${completed} of ${queued.length} done`,
-            progress: computeOverall(),
-          });
-        } catch (err: unknown) {
-          const msg =
-            (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-            "Upload failed";
-          failed.push(`${item.name}: ${msg}`);
-          fileProgress[i] = 0;
-        }
-      }
-
-      if (failed.length > 0) {
-        // Some files failed — show error toast (persistent so user sees it)
-        toast.update(toastId, {
-          title: `${failed.length} file${failed.length > 1 ? "s" : ""} failed to upload`,
-          description: failed[0],
-          variant: "error",
-          progress: undefined,
-          persistent: true,
-        });
-        setIsSaving(false);
-        return; // Don't save the lesson if any upload failed
-      }
-
-      // All uploaded — transition to success and auto-dismiss
-      toast.update(toastId, {
-        title: `${queued.length} file${queued.length > 1 ? "s" : ""} uploaded`,
-        description: undefined,
-        variant: "success",
-        progress: undefined,
-        persistent: false,
-      });
-    }
-
-    // ── Save the lesson ──────────────────────────────────────────────────
-    const allMaterialIds = [...doneMaterialIds, ...newMaterialIds];
-    try {
-      if (isEdit) await updateMut.mutateAsync({ data, materialIds: allMaterialIds });
-      else await createMut.mutateAsync({ data, materialIds: allMaterialIds });
-    } catch (err: unknown) {
-      setServerError(
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        "Failed to save lesson",
-      );
-    } finally {
-      setIsSaving(false);
-    }
+    // Navigate away immediately — upload continues in background
+    navigate("/lessons");
   };
-
-  const isPending = isSaving || createMut.isPending || updateMut.isPending;
 
   if (isEdit && lessonLoading) return <LoadingSpinner />;
 
@@ -333,10 +236,6 @@ export default function LessonForm() {
       {/* ── Lesson details ── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <h3 className="text-sm font-semibold text-foreground mb-4">Lesson Details</h3>
-
-        {serverError && (
-          <p className="mb-4 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>
-        )}
 
         <form id="lesson-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -375,32 +274,20 @@ export default function LessonForm() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Term (optional)</label>
-              <select
-                {...register("termId")}
-                disabled={isEdit}
-                className={`mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white ${
-                  isEdit ? "opacity-60 cursor-not-allowed" : ""
-                }`}
-              >
-                <option value="">No specific term</option>
-                {terms.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Order</label>
-              <input
-                type="number"
-                {...register("order", { valueAsNumber: true })}
-                min={0}
-                className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-              />
-            </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Term (optional)</label>
+            <select
+              {...register("termId")}
+              disabled={isEdit}
+              className={`mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white ${
+                isEdit ? "opacity-60 cursor-not-allowed" : ""
+              }`}
+            >
+              <option value="">No specific term</option>
+              {terms.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -425,12 +312,13 @@ export default function LessonForm() {
             />
           </div>
 
-          {!isEdit && (
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" {...register("isPublished")} className="h-4 w-4 rounded border-slate-300" />
-              <span className="font-medium text-foreground">Publish immediately</span>
-            </label>
-          )}
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <input type="checkbox" {...register("isPublished")} className="h-4 w-4 rounded border-slate-300" />
+            <span className="font-medium text-foreground">Published</span>
+            <span className="text-xs text-muted-foreground">
+              {isEdit ? "(students can see published lessons)" : "(publish immediately after saving)"}
+            </span>
+          </label>
         </form>
       </div>
 
@@ -438,7 +326,7 @@ export default function LessonForm() {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <h3 className="text-sm font-semibold text-foreground mb-1">Materials</h3>
         <p className="text-xs text-muted-foreground mb-4">
-          Add files below. They will upload when you click Save — you'll see progress in the top-right corner.
+          Add files below. They upload in the background after you click Save — you can navigate away freely.
         </p>
 
         {/* Drop zone */}
@@ -508,9 +396,8 @@ export default function LessonForm() {
                   )}
                   <button
                     type="button"
-                    disabled={isPending}
                     onClick={() => removeStaged(s.key)}
-                    className="p-0.5 rounded text-slate-400 hover:text-red-500 disabled:pointer-events-none"
+                    className="p-0.5 rounded text-slate-400 hover:text-red-500"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -536,10 +423,9 @@ export default function LessonForm() {
         <button
           type="submit"
           form="lesson-form"
-          disabled={isPending}
+          disabled={submitting}
           className="inline-flex items-center gap-1.5 px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
         >
-          {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {isEdit ? "Save Changes" : "Add Lesson"}
         </button>
       </div>
