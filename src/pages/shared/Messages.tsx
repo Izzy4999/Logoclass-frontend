@@ -135,10 +135,12 @@ function ChatPanel({
     },
   });
 
-  // Mark read on open
+  // Mark read on open — also refresh conversation list so unread badge clears immediately
   useEffect(() => {
-    messagingApi.markRead(conv.id).catch(() => {});
-  }, [conv.id]);
+    messagingApi.markRead(conv.id)
+      .then(() => qc.invalidateQueries({ queryKey: ["conversations"] }))
+      .catch(() => {});
+  }, [conv.id, qc]);
 
   // Socket: join/leave room
   useEffect(() => {
