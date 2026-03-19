@@ -13,7 +13,6 @@ import type { GradeLevel } from "@/types/class";
 
 const gradeLevelSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  order: z.number().int().min(0, "Order must be 0 or higher"),
   description: z.string().optional(),
 });
 type GradeLevelForm = z.infer<typeof gradeLevelSchema>;
@@ -39,7 +38,7 @@ export default function GradeLevels() {
 
   const createMut = useMutation({
     mutationFn: (data: GradeLevelForm) => gradeLevelsApi.create({
-      name: data.name, order: data.order,
+      name: data.name,
       description: data.description || undefined,
     }),
     onSuccess: () => { setCreateOpen(false); reset(); setServerError(""); invalidate(); },
@@ -48,7 +47,7 @@ export default function GradeLevels() {
 
   const editMut = useMutation({
     mutationFn: (data: GradeLevelForm) => gradeLevelsApi.update(editTarget!.id, {
-      name: data.name, order: data.order,
+      name: data.name,
       description: data.description || undefined,
     }),
     onSuccess: () => { setEditTarget(null); reset(); setServerError(""); invalidate(); },
@@ -62,28 +61,19 @@ export default function GradeLevels() {
 
   const openEdit = (g: GradeLevel) => {
     setEditTarget(g);
-    reset({ name: g.name, order: g.order ?? 0, description: g.description ?? "" });
+    reset({ name: g.name, description: g.description ?? "" });
     setServerError("");
   };
 
   const GradeForm = ({ isEdit }: { isEdit?: boolean }) => (
     <form onSubmit={handleSubmit((data: GradeLevelForm) => isEdit ? editMut.mutate(data) : createMut.mutate(data))} className="space-y-3">
       {serverError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>}
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Name *</label>
-          <input {...register("name")}
-            placeholder="e.g. JSS 1"
-            className={`mt-1 w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${errors.name ? "border-destructive" : "border-slate-200"}`} />
-          {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
-        </div>
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Order *</label>
-          <input type="number" {...register("order", { valueAsNumber: true })}
-            placeholder="e.g. 1"
-            className={`mt-1 w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${errors.order ? "border-destructive" : "border-slate-200"}`} />
-          {errors.order && <p className="text-xs text-destructive mt-1">{errors.order.message}</p>}
-        </div>
+      <div>
+        <label className="text-xs font-medium text-muted-foreground">Name *</label>
+        <input {...register("name")}
+          placeholder="e.g. JSS 1"
+          className={`mt-1 w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${errors.name ? "border-destructive" : "border-slate-200"}`} />
+        {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
       </div>
       <div>
         <label className="text-xs font-medium text-muted-foreground">Description (optional)</label>
@@ -110,7 +100,7 @@ export default function GradeLevels() {
         title="Grade Levels"
         description="Manage academic grade levels"
         action={
-          <button onClick={() => { setCreateOpen(true); reset({ name: "", order: 0, description: "" }); setServerError(""); }}
+          <button onClick={() => { setCreateOpen(true); reset({ name: "", description: "" }); setServerError(""); }}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90">
             <Plus className="h-4 w-4" /> New Grade Level
           </button>

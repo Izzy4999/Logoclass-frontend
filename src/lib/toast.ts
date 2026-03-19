@@ -11,6 +11,11 @@ export interface ToastItem {
   progress?: number;
   /** When true, the toast never auto-dismisses (used for in-progress uploads). */
   persistent?: boolean;
+  /** Optional action button rendered below the description (e.g. "Retry"). */
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
 }
 
 interface ToastStore {

@@ -36,7 +36,6 @@ const qSchema = z.object({
   options: z.string().optional(),
   answer: z.string().min(1, "Answer is required"),
   marks: z.number().min(1),
-  order: z.number().int().min(0),
 });
 type QForm = z.infer<typeof qSchema>;
 
@@ -60,7 +59,7 @@ export default function ExamForm() {
 
   const addQForm = useQForm<QForm>({
     resolver: zodResolver(qSchema),
-    defaultValues: { type: "MCQ", marks: 1, order: 0 },
+    defaultValues: { type: "MCQ", marks: 1 },
   });
   const watchQType = addQForm.watch("type");
 
@@ -173,12 +172,11 @@ export default function ExamForm() {
         options: q.type === "MCQ" && q.options ? q.options.split(",").map((o) => o.trim()).filter(Boolean) : null,
         answer: q.answer,
         marks: q.marks,
-        order: q.order,
       }]),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["exams", id] });
       setAddQOpen(false);
-      addQForm.reset({ type: "MCQ", marks: 1, order: 0 });
+      addQForm.reset({ type: "MCQ", marks: 1 });
     },
   });
 
@@ -188,7 +186,7 @@ export default function ExamForm() {
       const remaining = (exam?.questions ?? []).filter((q) => q.id !== qId);
       return examsApi.setQuestions(id!, remaining.map((q) => ({
         type: q.type, question: q.question, options: q.options,
-        answer: q.answer, marks: q.marks, order: q.order,
+        answer: q.answer, marks: q.marks,
       })));
     },
     onSuccess: () => {
@@ -389,7 +387,7 @@ export default function ExamForm() {
             <div className="mt-4 border border-primary/20 rounded-lg p-4 bg-blue-50/30 space-y-3">
               <h3 className="text-xs font-semibold text-foreground">New Question</h3>
               <form onSubmit={addQForm.handleSubmit((d) => addQMut.mutate(d))} className="space-y-3">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Type</label>
                     <select {...addQForm.register("type")} className="mt-1 w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-white outline-none">
@@ -401,10 +399,6 @@ export default function ExamForm() {
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Marks</label>
                     <input type="number" min={1} {...addQForm.register("marks", { valueAsNumber: true })} className="mt-1 w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Order</label>
-                    <input type="number" min={0} {...addQForm.register("order", { valueAsNumber: true })} className="mt-1 w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg outline-none" />
                   </div>
                 </div>
                 <div>
