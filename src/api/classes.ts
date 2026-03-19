@@ -23,7 +23,7 @@ export const gradeLevelsApi = {
   list: (params?: PaginationParams) =>
     apiClient.get<PaginatedResponse<GradeLevel>>("/grade-levels", { params }),
 
-  create: (dto: { name: string; order: number; description?: string }) =>
+  create: (dto: { name: string; description?: string }) =>
     apiClient.post<ApiResponse<GradeLevel>>("/grade-levels", dto),
 
   getById: (id: string) =>
@@ -76,7 +76,7 @@ export const academicYearsApi = {
   listTerms: (yearId: string) =>
     apiClient.get<ApiResponse<Term[]>>(`/academic-years/${yearId}/terms`),
 
-  createTerm: (yearId: string, dto: { name: string; order: number; startDate: string; endDate: string; isCurrent?: boolean }) =>
+  createTerm: (yearId: string, dto: { name: string; startDate: string; endDate: string; isCurrent?: boolean }) =>
     apiClient.post<ApiResponse<Term>>(`/academic-years/${yearId}/terms`, dto),
 
   updateTerm: (yearId: string, termId: string, dto: Partial<{ name: string; startDate: string; endDate: string; isCurrent: boolean }>) =>

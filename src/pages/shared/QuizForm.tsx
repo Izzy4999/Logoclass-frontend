@@ -18,7 +18,6 @@ const questionSchema = z.object({
   options: z.string().optional(), // comma-separated for MCQ
   answer: z.string().min(1, "Answer is required"),
   marks: z.number().min(1),
-  order: z.number().int().min(0),
 });
 type QuestionForm = z.infer<typeof questionSchema>;
 
@@ -37,7 +36,6 @@ const addQSchema = z.object({
   options: z.string().optional(),
   answer: z.string().min(1, "Answer is required"),
   marks: z.number().min(1),
-  order: z.number().int().min(0),
 });
 
 export default function QuizForm() {
@@ -60,7 +58,7 @@ export default function QuizForm() {
   // Separate form for adding question in edit mode
   const addQForm = useQForm<QuestionForm>({
     resolver: zodResolver(addQSchema),
-    defaultValues: { type: "MCQ", marks: 1, order: 0 },
+    defaultValues: { type: "MCQ", marks: 1 },
   });
 
   const { data: quizData, isLoading: quizLoading } = useQuery({
@@ -99,7 +97,6 @@ export default function QuizForm() {
           options: q.type === "MCQ" && q.options ? q.options.split(",").map((o) => o.trim()).filter(Boolean) : null,
           answer: q.answer,
           marks: q.marks,
-          order: q.order,
         })),
       }),
     onSuccess: () => {
@@ -136,12 +133,11 @@ export default function QuizForm() {
         options: q.type === "MCQ" && q.options ? q.options.split(",").map((o) => o.trim()).filter(Boolean) : null,
         answer: q.answer,
         marks: q.marks,
-        order: q.order,
       } as Partial<QuizQuestion>),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["quizzes", id] });
       setAddQOpen(false);
-      addQForm.reset({ type: "MCQ", marks: 1, order: 0 });
+      addQForm.reset({ type: "MCQ", marks: 1 });
     },
   });
 
@@ -181,7 +177,7 @@ export default function QuizForm() {
         >
           <X className="h-4 w-4" />
         </button>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium text-muted-foreground">Type</label>
             <select
@@ -199,15 +195,6 @@ export default function QuizForm() {
               type="number"
               min={1}
               {...register(`questions.${index}.marks`, { valueAsNumber: true })}
-              className="mt-1 w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Order</label>
-            <input
-              type="number"
-              min={0}
-              {...register(`questions.${index}.order`, { valueAsNumber: true })}
               className="mt-1 w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
@@ -320,7 +307,7 @@ export default function QuizForm() {
                 <label className="text-sm font-medium text-foreground">Questions ({fields.length})</label>
                 <button
                   type="button"
-                  onClick={() => append({ type: "MCQ", question: "", options: "", answer: "", marks: 1, order: fields.length })}
+                  onClick={() => append({ type: "MCQ", question: "", options: "", answer: "", marks: 1 })}
                   className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                 >
                   <Plus className="h-3.5 w-3.5" /> Add Question
@@ -411,7 +398,7 @@ export default function QuizForm() {
                 onSubmit={addQForm.handleSubmit((d) => addQMut.mutate(d))}
                 className="space-y-3"
               >
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Type</label>
                     <select
@@ -429,15 +416,6 @@ export default function QuizForm() {
                       type="number"
                       min={1}
                       {...addQForm.register("marks", { valueAsNumber: true })}
-                      className="mt-1 w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Order</label>
-                    <input
-                      type="number"
-                      min={0}
-                      {...addQForm.register("order", { valueAsNumber: true })}
                       className="mt-1 w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg outline-none"
                     />
                   </div>

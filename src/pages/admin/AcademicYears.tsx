@@ -62,7 +62,6 @@ type YearFormData = z.infer<typeof yearSchema>;
 
 const termSchema = z.object({
   name: z.string().min(1, "Term name is required"),
-  order: z.number().int().min(1, "Order is required"),
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
   isCurrent: z.boolean(),
@@ -111,7 +110,7 @@ export default function AcademicYears() {
     formState: { errors: termErrors },
   } = useForm<TermFormData>({
     resolver: zodResolver(termSchema),
-    defaultValues: { name: "", order: 1, startDate: "", endDate: "", isCurrent: false },
+    defaultValues: { name: "", startDate: "", endDate: "", isCurrent: false },
   });
 
   // ── Queries ────────────────────────────────────────────────────────────────
@@ -177,7 +176,7 @@ export default function AcademicYears() {
   const createTermMut = useMutation({
     mutationFn: (d: TermFormData) =>
       academicYearsApi.createTerm(termFormYear!, {
-        name: d.name, order: d.order,
+        name: d.name,
         startDate: d.startDate, endDate: d.endDate, isCurrent: d.isCurrent,
       }),
     onSuccess: () => {
@@ -417,7 +416,7 @@ export default function AcademicYears() {
                       <button
                         onClick={() => {
                           setTermFormYear(y.id);
-                          resetTerm({ name: "", order: 1, startDate: "", endDate: "", isCurrent: false });
+                          resetTerm({ name: "", startDate: "", endDate: "", isCurrent: false });
                           setTermServerError("");
                         }}
                         className="flex items-center gap-1 px-2 py-1 text-xs bg-primary text-white rounded-lg hover:bg-primary/90"
@@ -500,36 +499,21 @@ export default function AcademicYears() {
                             {termServerError}
                           </p>
                         )}
+                        <div>
+                          <input
+                            {...registerTerm("name")}
+                            placeholder="Term name *"
+                            className={`px-2 py-1.5 text-xs border rounded outline-none focus:ring-2 focus:ring-primary/30 w-full ${
+                              termErrors.name ? "border-destructive" : "border-slate-200"
+                            }`}
+                          />
+                          {termErrors.name && (
+                            <p className="text-xs text-destructive mt-0.5">
+                              {termErrors.name.message}
+                            </p>
+                          )}
+                        </div>
                         <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <input
-                              {...registerTerm("name")}
-                              placeholder="Term name *"
-                              className={`px-2 py-1.5 text-xs border rounded outline-none focus:ring-2 focus:ring-primary/30 w-full ${
-                                termErrors.name ? "border-destructive" : "border-slate-200"
-                              }`}
-                            />
-                            {termErrors.name && (
-                              <p className="text-xs text-destructive mt-0.5">
-                                {termErrors.name.message}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <input
-                              type="number"
-                              {...registerTerm("order", { valueAsNumber: true })}
-                              placeholder="Order *"
-                              className={`px-2 py-1.5 text-xs border rounded outline-none focus:ring-2 focus:ring-primary/30 w-full ${
-                                termErrors.order ? "border-destructive" : "border-slate-200"
-                              }`}
-                            />
-                            {termErrors.order && (
-                              <p className="text-xs text-destructive mt-0.5">
-                                {termErrors.order.message}
-                              </p>
-                            )}
-                          </div>
                           <div>
                             <input
                               type="date"
