@@ -7,11 +7,11 @@ interface LoadingSpinnerProps {
   className?: string;
 }
 
-// ── Animation tuning ────────────────────────────────────────────────────────
-const NUM_PAGES = 4;     // pages in the left stack
-const CYCLE = 3.6;       // full loop duration (s)
-const STAGGER = 0.58;    // delay between consecutive page flips
-const FLIP_DUR = 0.62;   // time for one page to cross to the right
+// ── Animation constants ──────────────────────────────────────────────────────
+const NUM_PAGES = 4;     // pages in left stack that flip to the right
+const CYCLE     = 3.6;   // full loop duration (seconds)
+const STAGGER   = 0.55;  // delay between consecutive pages
+const FLIP_DUR  = 0.60;  // time for one page to cross to the right
 
 export default function LoadingSpinner({ fullScreen, className }: LoadingSpinnerProps) {
   const content = (
@@ -35,52 +35,54 @@ export default function LoadingSpinner({ fullScreen, className }: LoadingSpinner
   );
 }
 
-// ── Open book ────────────────────────────────────────────────────────────────
+// ── Open Book ────────────────────────────────────────────────────────────────
 function OpenBook() {
-  // Book dimensions — wide & flat to match the image
-  const W = 210;   // total width (both pages + spine)
-  const H = 58;    // height before perspective tilt
-  const SW = 14;   // spine width
-  const PW = (W - SW) / 2;  // 98px per page side
+  const SW = 12;          // spine width
+  const PW = 100;         // page width per side
+  const H  = 68;          // page height
+  const W  = PW * 2 + SW; // 212 total
 
   return (
+    /*
+     * perspective on the wrapper gives depth to the rotateY flips.
+     * The book itself has NO rotateX so both pages face the viewer
+     * just like the reference image.
+     */
     <div
       style={{
-        perspective: "480px",
-        perspectiveOrigin: "50% 40%",
+        perspective: "600px",
+        perspectiveOrigin: "50% 50%",
         width: W,
-        height: H + 24, // extra for shadow offset
+        height: H + 20,
         display: "flex",
-        alignItems: "flex-start",
+        alignItems: "center",
         justifyContent: "center",
       }}
     >
-      {/* Outer wrapper — rotated so book appears flat-open from above */}
       <div
         style={{
           position: "relative",
           width: W,
           height: H,
           transformStyle: "preserve-3d",
-          transform: "rotateX(42deg)",
-          marginTop: 8,
+          // ← NO rotateX — book faces upward, pages visible left & right
         }}
       >
-        {/* ── Drop shadow ──────────────────────────────────── */}
+        {/* ── Soft drop shadow ─────────────────────────────── */}
         <div
           style={{
             position: "absolute",
-            inset: "12px 10px",
-            bottom: -18,
-            borderRadius: "50%",
-            background: "radial-gradient(ellipse at center, rgba(30,64,175,0.18) 0%, transparent 70%)",
+            left: 12,
+            right: 12,
+            bottom: -14,
+            height: 14,
+            background:
+              "radial-gradient(ellipse at center, rgba(30,64,175,0.16) 0%, transparent 70%)",
             filter: "blur(6px)",
-            transform: "translateZ(-4px) scaleY(0.5)",
-            transformOrigin: "center bottom",
           }}
         />
 
-        {/* ── Right page — static background ───────────────── */}
+        {/* ── RIGHT page (static) ──────────────────────────── */}
         <div
           style={{
             position: "absolute",
@@ -88,30 +90,29 @@ function OpenBook() {
             top: 0,
             width: PW,
             height: H,
-            background: "linear-gradient(108deg, #dbeafe 0%, #bfdbfe 100%)",
-            borderRadius: "0 10px 10px 0",
-            border: "1px solid rgba(30,64,175,0.12)",
+            background: "linear-gradient(115deg, #dbeafe 0%, #bfdbfe 100%)",
+            borderRadius: "0 14px 14px 0",
+            border: "1px solid rgba(30,64,175,0.14)",
             overflow: "hidden",
           }}
         >
-          {/* Page content lines */}
-          {[10, 18, 26, 34, 42].map((top, i) => (
+          {[12, 21, 30, 39, 48].map((top, i) => (
             <div
               key={i}
               style={{
                 position: "absolute",
                 top,
-                left: 12,
-                right: i % 2 === 0 ? 12 : 24,
+                left: 14,
+                right: i % 2 === 0 ? 14 : 28,
                 height: 1.5,
-                background: "rgba(30,64,175,0.13)",
+                background: "rgba(30,64,175,0.14)",
                 borderRadius: 2,
               }}
             />
           ))}
         </div>
 
-        {/* ── Left page — static base (shows when pages finish flipping) ─ */}
+        {/* ── LEFT page base (shows once all pages have flipped) ─ */}
         <div
           style={{
             position: "absolute",
@@ -119,9 +120,9 @@ function OpenBook() {
             top: 0,
             width: PW,
             height: H,
-            background: "linear-gradient(72deg, #eff6ff 0%, #dbeafe 100%)",
-            borderRadius: "10px 0 0 10px",
-            border: "1px solid rgba(30,64,175,0.1)",
+            background: "linear-gradient(65deg, #eff6ff 0%, #dbeafe 100%)",
+            borderRadius: "14px 0 0 14px",
+            border: "1px solid rgba(30,64,175,0.10)",
           }}
         />
 
@@ -133,13 +134,21 @@ function OpenBook() {
             top: 0,
             width: SW,
             height: H,
-            background: "linear-gradient(0deg, #1e3a8a 0%, #1e40af 50%, #3b82f6 100%)",
+            background:
+              "linear-gradient(180deg, #3b82f6 0%, #1e40af 45%, #1e3a8a 100%)",
             zIndex: 20,
-            boxShadow: "0 0 10px rgba(30,58,138,0.5)",
+            boxShadow: "0 0 10px rgba(30,58,138,0.35)",
           }}
         />
 
-        {/* ── Animated pages (left side → flip right) ──────── */}
+        {/* ── Animated pages: LEFT side → flip RIGHT ───────── */}
+        {/*
+         * Each page is in a container that spans the LEFT half only.
+         * transformOrigin "right center" = pivot at the spine.
+         * rotateY 0→-180 sends the page over to the right side.
+         * preserve-3d on every level lets the flipped page appear
+         * geometrically on the right side of the book.
+         */}
         <div
           style={{
             position: "absolute",
@@ -151,17 +160,17 @@ function OpenBook() {
           }}
         >
           {Array.from({ length: NUM_PAGES }).map((_, rawIdx) => {
-            // Render in reverse order so page-0 sits on top (first to flip)
+            // Render in reverse so page-0 sits on top (first to flip)
             const i = NUM_PAGES - 1 - rawIdx;
 
             const flipStart = i * STAGGER;
-            const flipEnd = flipStart + FLIP_DUR;
+            const flipEnd   = flipStart + FLIP_DUR;
             const t1 = Math.max(0.008, flipStart / CYCLE);
-            const t2 = Math.min(0.89, flipEnd / CYCLE);
+            const t2 = Math.min(0.88,  flipEnd   / CYCLE);
 
-            // Colour: top page lightest → progressively deeper blue underneath
-            const sat = 68 - rawIdx * 7;
-            const lit = 93 - rawIdx * 4;
+            // Colour gradient: lightest on top → deeper below
+            const sat = 70 - rawIdx * 7;
+            const lit = 94 - rawIdx * 4;
 
             return (
               <motion.div
@@ -169,17 +178,16 @@ function OpenBook() {
                 style={{
                   position: "absolute",
                   inset: 0,
-                  // Pivot at the RIGHT edge — the spine
+                  // ← pivot = spine (right edge of this element)
                   transformOrigin: "right center",
-                  borderRadius: "10px 0 0 10px",
+                  borderRadius: "14px 0 0 14px",
                   backgroundColor: `hsl(214, ${sat}%, ${lit}%)`,
-                  border: "0.5px solid rgba(59,130,246,0.2)",
-                  // Slight left shadow so pages look stacked
-                  boxShadow: `-${1 + rawIdx}px 1px 4px rgba(0,0,0,0.07)`,
+                  border: "0.5px solid rgba(59,130,246,0.22)",
+                  boxShadow: `-${1 + rawIdx}px 2px 5px rgba(0,0,0,0.07)`,
                   overflow: "hidden",
                 }}
                 animate={{
-                  // 0 = flat left  |  -90 = edge-on at spine  |  -180 = flat right
+                  // flat-left → edge-on at spine → flat-right → hold → snap back
                   rotateY: [0, 0, -180, -180, 0],
                 }}
                 transition={{
@@ -189,17 +197,17 @@ function OpenBook() {
                   repeat: Infinity,
                 }}
               >
-                {/* Content lines on each flippable page */}
-                {[10, 18, 26].map((top, li) => (
+                {/* Content lines on each flipping page */}
+                {[12, 21, 30].map((top, li) => (
                   <div
                     key={li}
                     style={{
                       position: "absolute",
                       top,
-                      left: 12,
-                      right: li === 1 ? 24 : 12,
+                      left: 14,
+                      right: li === 1 ? 28 : 14,
                       height: 1.5,
-                      background: "rgba(30,64,175,0.12)",
+                      background: "rgba(30,64,175,0.11)",
                       borderRadius: 2,
                     }}
                   />
@@ -209,36 +217,32 @@ function OpenBook() {
           })}
         </div>
 
-        {/* ── Page-stack edge (bottom strip, both sides) ───── */}
-        {/* Left stack edge lines */}
-        {Array.from({ length: 3 }).map((_, i) => (
+        {/* ── Page-stack depth strips (bottom edge, both sides) ─ */}
+        {[0, 1, 2].map((i) => (
           <div
-            key={`le-${i}`}
+            key={`ls-${i}`}
             style={{
               position: "absolute",
               left: i * 2,
-              top: H - 1,
+              bottom: -(i + 1) * 3,
               width: PW - i * 2,
               height: 3,
-              background: `hsl(214, 60%, ${88 - i * 6}%)`,
-              borderRadius: "0 0 0 2px",
-              zIndex: 5 - i,
+              background: `hsl(214, 55%, ${86 - i * 7}%)`,
+              borderRadius: "0 0 0 3px",
             }}
           />
         ))}
-        {/* Right stack edge lines */}
-        {Array.from({ length: 3 }).map((_, i) => (
+        {[0, 1, 2].map((i) => (
           <div
-            key={`re-${i}`}
+            key={`rs-${i}`}
             style={{
               position: "absolute",
               right: i * 2,
-              top: H - 1,
+              bottom: -(i + 1) * 3,
               width: PW - i * 2,
               height: 3,
-              background: `hsl(214, 50%, ${85 - i * 6}%)`,
-              borderRadius: "0 0 2px 0",
-              zIndex: 5 - i,
+              background: `hsl(214, 48%, ${83 - i * 7}%)`,
+              borderRadius: "0 0 3px 0",
             }}
           />
         ))}
@@ -247,7 +251,7 @@ function OpenBook() {
   );
 }
 
-// ── "Loading" with letter bounce ─────────────────────────────────────────────
+// ── "Loading" with per-letter bounce ─────────────────────────────────────────
 function BouncingLabel() {
   return (
     <div className="flex items-end gap-[1px]">
