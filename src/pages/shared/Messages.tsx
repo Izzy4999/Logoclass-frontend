@@ -135,12 +135,17 @@ function ChatPanel({
     },
   });
 
-  // Mark read on open — also refresh conversation list so unread badge clears immediately
+  const { mutate: markRead } = useMutation({
+    mutationFn: (conversationId: string) => messagingApi.markRead(conversationId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+
+  // Mark read on open — fires via mutation so React Query tracks the call properly
   useEffect(() => {
-    messagingApi.markRead(conv.id)
-      .then(() => qc.invalidateQueries({ queryKey: ["conversations"] }))
-      .catch(() => {});
-  }, [conv.id, qc]);
+    markRead(conv.id);
+  }, [conv.id, markRead]);
 
   // Socket: join/leave room
   useEffect(() => {
