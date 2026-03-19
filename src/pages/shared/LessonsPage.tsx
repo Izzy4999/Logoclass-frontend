@@ -54,7 +54,7 @@ export default function LessonsPage() {
             <thead className="bg-muted text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Title</th>
-                <th className="px-4 py-3 text-left font-medium">Class</th>
+                <th className="px-4 py-3 text-left font-medium">Grade Level</th>
                 <th className="px-4 py-3 text-left font-medium">Order</th>
                 <th className="px-4 py-3 text-left font-medium">Attachments</th>
                 <th className="px-4 py-3 text-left font-medium">Status</th>
@@ -67,7 +67,7 @@ export default function LessonsPage() {
                   <td className="px-4 py-3 font-medium">
                     <Link to={`${lesson.id}`} className="hover:text-primary hover:underline">{lesson.title}</Link>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{lesson.classId}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{lesson.gradeLevel?.name ?? "—"}</td>
                   <td className="px-4 py-3">{lesson.order}</td>
                   <td className="px-4 py-3">{lesson.attachmentCount ?? 0}</td>
                   <td className="px-4 py-3">

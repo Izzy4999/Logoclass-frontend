@@ -29,7 +29,8 @@ export interface LessonProgress {
 
 export interface Lesson {
   id: string;
-  classId: string;
+  gradeLevelId: string;
+  gradeLevel?: { id: string; name: string } | null;
   subjectId: string | null;
   termId: string | null;
   title: string;
