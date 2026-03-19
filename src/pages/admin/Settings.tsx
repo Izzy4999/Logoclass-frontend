@@ -1,15 +1,14 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, CreditCard, Zap, Save, Loader2, Eye, EyeOff, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Building2, CreditCard, Save, Loader2, Eye, EyeOff, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { tenantsApi } from "@/api/tenants";
 import { paymentsApi } from "@/api/payments";
-import type { TenantFeature } from "@/types/tenant";
 import type { PaymentProvider } from "@/types/payment";
 
-type Tab = "school" | "payment" | "features";
+type Tab = "school" | "payment";
 
 const PROVIDERS: { value: PaymentProvider; label: string; color: string }[] = [
   { value: "FLUTTERWAVE", label: "Flutterwave", color: "bg-yellow-500" },
@@ -91,11 +90,6 @@ export default function Settings() {
     }
   }, [tenantData, schoolSynced]);
 
-  const { data: featuresData, isLoading: fLoad } = useQuery({
-    queryKey: ["tenant-features"],
-    queryFn: () => tenantsApi.getFeatures(),
-  });
-
   const { data: payConfigData, isLoading: pLoad } = useQuery({
     queryKey: ["pay-config"],
     queryFn: () => paymentsApi.getConfig(),
@@ -103,7 +97,6 @@ export default function Settings() {
   });
 
   const tenant = tenantData?.data?.data;
-  const features: TenantFeature[] = featuresData?.data?.data ?? [];
   const payConfig = payConfigData?.data?.data;
 
   // ── Mutations ─────────────────────────────────────────────────────────────────
@@ -125,18 +118,11 @@ export default function Settings() {
     onError: () => showToast("Failed to delete config", false),
   });
 
-  const toggleFeature = useMutation({
-    mutationFn: ({ feature, enabled }: { feature: string; enabled: boolean }) =>
-      tenantsApi.updateFeature(feature, enabled),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tenant-features"] }),
-  });
-
-  if (tLoad || fLoad) return <LoadingSpinner />;
+  if (tLoad) return <LoadingSpinner />;
 
   const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
-    { key: "school",   label: "School Info",  icon: Building2  },
-    { key: "payment",  label: "Payment",      icon: CreditCard },
-    { key: "features", label: "Features",     icon: Zap        },
+    { key: "school",  label: "School Info", icon: Building2  },
+    { key: "payment", label: "Payment",     icon: CreditCard },
   ];
 
   return (
@@ -296,33 +282,6 @@ export default function Settings() {
             <p>• <strong>Flutterwave:</strong> Dashboard → Settings → API → Live Keys</p>
             <p>• <strong>Stripe:</strong> Dashboard → Developers → API Keys</p>
           </div>
-        </div>
-      )}
-
-      {/* ── Features Tab ────────────────────────────────────────────────── */}
-      {tab === "features" && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-          {features.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No feature flags configured.</p>
-          ) : (
-            <div className="divide-y divide-slate-50">
-              {features.map((f) => (
-                <div key={f.feature} className="flex items-center justify-between py-3">
-                  <div>
-                    <p className="text-sm font-medium capitalize">{f.feature.replace(/_/g, " ").toLowerCase()}</p>
-                    <p className="text-xs text-muted-foreground">Feature flag</p>
-                  </div>
-                  {/* Toggle switch */}
-                  <button
-                    onClick={() => toggleFeature.mutate({ feature: f.feature, enabled: !f.enabled })}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${f.enabled ? "bg-primary" : "bg-slate-200"}`}
-                  >
-                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${f.enabled ? "translate-x-6" : "translate-x-1"}`} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

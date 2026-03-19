@@ -10,10 +10,14 @@ export interface Fee {
   amount: number;
   currency: string;
   category: FeeCategory;
-  classId: string | null;
+  gradeLevelId: string | null;
+  academicYearId: string | null;
   termId: string | null;
   dueDate: string | null;
   isActive: boolean;
+  gradeLevel?: { id: string; name: string } | null;
+  academicYear?: { id: string; name: string } | null;
+  term?: { id: string; name: string } | null;
 }
 
 export interface FeeAssignment {
