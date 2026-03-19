@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { messagingApi } from "@/api/messaging";
 import { useAuth } from "@/hooks/useAuth";
-import { connectSocket, getSocket, disconnectSocket } from "@/lib/socket";
+import { getSocket } from "@/lib/socket";
 import { cn, formatRelative } from "@/lib/utils";
 import type { Conversation, Message, ContactUser } from "@/types/notification";
 
@@ -118,9 +118,7 @@ function ChatPanel({
     ? (conv.name ?? "Group")
     : conv.participants.filter((p) => p.id !== currentUserId).map((p) => `${p.firstName} ${p.lastName}`).join(", ") || "You";
 
-  const subLabel = conv.isGroup
-    ? `${conv.participants.length} members`
-    : (conv.participants.find((p) => p.id !== currentUserId)?.role as unknown as { name?: string } | undefined)?.name ?? "";
+  const subLabel = conv.isGroup ? `${conv.participants.length} members` : "";
 
   const { data, isLoading } = useQuery({
     queryKey: ["messages", conv.id],
@@ -405,13 +403,14 @@ export default function Messages() {
   // ── Socket global listener ───────────────────────────────────────────────
 
   useEffect(() => {
-    const socket = connectSocket();
+    const socket = getSocket();
+    if (!socket) return;
     const handler = () => {
       qc.invalidateQueries({ queryKey: ["conversations"] });
     };
-    socket?.on("new_message", handler);
+    socket.on("new_message", handler);
     return () => {
-      socket?.off("new_message", handler);
+      socket.off("new_message", handler);
     };
   }, [qc]);
 
