@@ -13,14 +13,14 @@ import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { lessonsApi } from "@/api/lessons";
 import type { Material } from "@/api/uploads";
-import { classesApi, academicYearsApi, subjectsApi } from "@/api/classes";
-import type { ClassSection, Term, AcademicYear } from "@/types/class";
+import { gradeLevelsApi, academicYearsApi, subjectsApi } from "@/api/classes";
+import type { GradeLevel, Term, AcademicYear } from "@/types/class";
 import { uploadManager } from "@/lib/uploadManager";
 
 // ── Schema ───────────────────────────────────────────────────────────────────
 
 const schema = z.object({
-  classId: z.string().min(1, "Class is required"),
+  gradeLevelId: z.string().min(1, "Grade level is required"),
   subjectId: z.string().optional(),
   termId: z.string().optional(),
   title: z.string().min(1, "Title is required"),
@@ -89,11 +89,11 @@ export default function LessonForm() {
   });
   const lesson = lessonData?.data?.data;
 
-  const { data: classesData } = useQuery({
-    queryKey: ["classes", { limit: 100 }],
-    queryFn: () => classesApi.list({ limit: 100 }),
+  const { data: gradeLevelsData } = useQuery({
+    queryKey: ["grade-levels", { limit: 100 }],
+    queryFn: () => gradeLevelsApi.list({ limit: 100 }),
   });
-  const classes: ClassSection[] = classesData?.data?.data ?? [];
+  const gradeLevels: GradeLevel[] = gradeLevelsData?.data?.data ?? [];
 
   const { data: subjectsData } = useQuery({
     queryKey: ["subjects", { limit: 100 }],
@@ -119,7 +119,7 @@ export default function LessonForm() {
   useEffect(() => {
     if (lesson) {
       reset({
-        classId: (lesson as any).class?.id ?? (lesson as any).classId ?? "",
+        gradeLevelId: (lesson as any).gradeLevel?.id ?? (lesson as any).gradeLevelId ?? "",
         subjectId: (lesson as any).subject?.id ?? (lesson as any).subjectId ?? "",
         termId: (lesson as any).term?.id ?? (lesson as any).termId ?? "",
         title: lesson.title,
@@ -199,7 +199,7 @@ export default function LessonForm() {
     uploadManager.enqueue({
       lessonPayload: {
         lessonId: isEdit ? id! : null,
-        classId: data.classId,
+        gradeLevelId: data.gradeLevelId,
         subjectId: data.subjectId || undefined,
         termId: data.termId || undefined,
         title: data.title,
@@ -240,22 +240,20 @@ export default function LessonForm() {
         <form id="lesson-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Class *</label>
+              <label className="text-xs font-medium text-muted-foreground">Grade Level *</label>
               <select
-                {...register("classId")}
+                {...register("gradeLevelId")}
                 disabled={isEdit}
                 className={`mt-1 w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white ${
-                  errors.classId ? "border-destructive" : "border-slate-200"
+                  errors.gradeLevelId ? "border-destructive" : "border-slate-200"
                 } ${isEdit ? "opacity-60 cursor-not-allowed" : ""}`}
               >
-                <option value="">Select class...</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}{c.section ? ` (${c.section})` : ""}
-                  </option>
+                <option value="">Select grade level...</option>
+                {gradeLevels.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
                 ))}
               </select>
-              {errors.classId && <p className="text-xs text-destructive mt-1">{errors.classId.message}</p>}
+              {errors.gradeLevelId && <p className="text-xs text-destructive mt-1">{errors.gradeLevelId.message}</p>}
             </div>
 
             <div>

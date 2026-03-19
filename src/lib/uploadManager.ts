@@ -7,10 +7,13 @@
  * - saves the lesson after all files are uploaded
  * - fires an optional onSaved() callback for TanStack Query invalidation
  *
- * A single progress toast (top-right) tracks each job. On success it
- * transitions to a green success toast that auto-dismisses. On failure
- * it stays red and persistent with a "Retry" button — clicking Retry
- * dismisses the error toast and re-enqueues the exact same job.
+ * Toast lifecycle:
+ * - Upload phase : blue "info" progress bar (never reaches 100 until lesson saved)
+ * - Saving phase : blue "info", no progress bar, description "X files uploaded"
+ * - SUCCESS      : green "success" — ONLY fires after the lesson is created/updated
+ * - Upload error : red "error" + Retry (re-enqueues original job with all files)
+ * - Save error   : red "error" + Retry (re-enqueues with already-uploaded IDs,
+ *                  skips re-uploading files that already landed in storage)
  */
 
 import { uploadsApi } from "@/api/uploads";
@@ -22,7 +25,7 @@ import { toast } from "@/lib/toast";
 interface LessonPayload {
   /** null → create, string → update */
   lessonId: string | null;
-  classId: string;
+  gradeLevelId: string;
   subjectId?: string;
   termId?: string;
   title: string;
@@ -95,6 +98,12 @@ class UploadManager {
     const newMaterialIds: string[] = [];
 
     // ── 1. Upload files ─────────────────────────────────────────────────────
+    //
+    // The progress bar intentionally never hits 100% during this phase.
+    // For intermediate files (1 of N) we show partial overall progress.
+    // For the last file, we skip the "N of N done" update entirely and let
+    // the "Saving…" state below take over — this ensures the user never sees
+    // a full progress bar before the lesson is actually created.
 
     if (pendingFiles.length > 0) {
       const fileProgress: number[] = pendingFiles.map(() => 0);
@@ -109,24 +118,30 @@ class UploadManager {
           const res = await uploadsApi.upload(item.file, (pct) => {
             fileProgress[i] = pct;
             toast.update(toastId, {
-              description: item.name,
+              description: `${item.name} (${i + 1}/${pendingFiles.length})`,
               progress: computeOverall(),
             });
           });
 
           // The global response interceptor wraps everything in
           // { success, message, data: <service-return> }.
-          // The uploads service now returns the material object directly,
+          // The uploads service returns the material object directly,
           // so res.data.data is the material.
           const material = res.data.data!;
           newMaterialIds.push(material.id);
 
-          fileProgress[i] = 100;
+          fileProgress[i] = 100; // internal bookkeeping
+
+          // For intermediate files only — show "X of N uploaded" with partial progress.
+          // Skip the update for the last file so we never show a full progress bar
+          // before the lesson is saved; the "Saving…" update below handles that.
           const done = newMaterialIds.length;
-          toast.update(toastId, {
-            description: `${done} of ${pendingFiles.length} done`,
-            progress: computeOverall(),
-          });
+          if (done < pendingFiles.length) {
+            toast.update(toastId, {
+              description: `${done} of ${pendingFiles.length} uploaded`,
+              progress: computeOverall(),
+            });
+          }
         } catch (err: unknown) {
           const msg =
             (err as { response?: { data?: { message?: string } } })
@@ -162,11 +177,16 @@ class UploadManager {
     }
 
     // ── 2. Save the lesson ──────────────────────────────────────────────────
+    //
+    // Only after this succeeds do we show the green success toast.
 
     toast.update(toastId, {
       title: `Saving "${lessonPayload.title}"…`,
-      description: undefined,
-      progress: undefined,
+      description:
+        newMaterialIds.length > 0
+          ? `${newMaterialIds.length} file${newMaterialIds.length !== 1 ? "s" : ""} uploaded`
+          : undefined,
+      progress: undefined, // no progress bar during save — avoids false "done" signal
     });
 
     const allMaterialIds = [
@@ -188,7 +208,7 @@ class UploadManager {
       } else {
         // Create
         await lessonsApi.create({
-          classId: lessonPayload.classId,
+          gradeLevelId: lessonPayload.gradeLevelId,
           subjectId: lessonPayload.subjectId,
           termId: lessonPayload.termId,
           title: lessonPayload.title,
@@ -201,13 +221,16 @@ class UploadManager {
       // Notify caller to invalidate queries
       onSaved?.();
 
-      // Success toast — auto-dismisses after 4.5 s
+      // ✅ SUCCESS — only reached when the lesson is actually created/updated.
+      // The green toast is the signal that the lesson (not just the files) was saved.
+      const fileDesc =
+        newMaterialIds.length > 0
+          ? `${newMaterialIds.length} file${newMaterialIds.length !== 1 ? "s" : ""} attached`
+          : undefined;
+
       toast.update(toastId, {
-        title:
-          pendingFiles.length > 0
-            ? `${pendingFiles.length} file${pendingFiles.length > 1 ? "s" : ""} uploaded & saved`
-            : `"${lessonPayload.title}" saved`,
-        description: undefined,
+        title: lessonPayload.lessonId ? "Lesson updated!" : "Lesson created!",
+        description: fileDesc,
         variant: "success",
         progress: undefined,
         persistent: false,
@@ -223,7 +246,7 @@ class UploadManager {
         lessonPayload: {
           ...job.lessonPayload,
           // Merge any newly uploaded material IDs into existing so we don't
-          // re-upload files that already landed in S3.
+          // re-upload files that already landed in storage.
           existingMaterialIds: [
             ...job.lessonPayload.existingMaterialIds,
             ...newMaterialIds,

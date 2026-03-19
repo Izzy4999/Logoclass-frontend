@@ -3,11 +3,11 @@ import type { ApiResponse, PaginatedResponse, PaginationParams } from "@/types/a
 import type { Lesson, LessonAttachment, LessonProgress } from "@/types/lesson";
 
 export const lessonsApi = {
-  list: (params?: PaginationParams & { classId?: string; subjectId?: string; termId?: string }) =>
+  list: (params?: PaginationParams & { gradeLevelId?: string; subjectId?: string; termId?: string }) =>
     apiClient.get<PaginatedResponse<Lesson>>("/lessons", { params }),
 
   create: (dto: {
-    classId: string;
+    gradeLevelId: string;
     subjectId?: string;
     termId?: string;
     title: string;

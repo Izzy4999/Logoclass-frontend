@@ -54,6 +54,8 @@ export default function LiveClassForm() {
     queryFn: () => classesApi.list({ limit: 100 }),
   });
   const classes: ClassSection[] = classesData?.data?.data ?? [];
+  // Grade level of selected class — used to filter relevant lessons
+  const selectedGradeLevelId = classes.find((c) => c.id === selectedClassId)?.gradeLevel?.id;
 
   // ── Current academic year → terms ────────────────────────────────────────
   const { data: yearsData } = useQuery({
@@ -69,11 +71,11 @@ export default function LiveClassForm() {
   });
   const terms: Term[] = termsData?.data?.data ?? [];
 
-  // ── Lessons filtered by selected class ───────────────────────────────────
+  // ── Lessons filtered by grade level of selected class ────────────────────
   const { data: lessonsData } = useQuery({
-    queryKey: ["lessons", { classId: selectedClassId, limit: 100 }],
-    queryFn: () => lessonsApi.list({ classId: selectedClassId!, limit: 100 }),
-    enabled: !!selectedClassId,
+    queryKey: ["lessons", { gradeLevelId: selectedGradeLevelId, limit: 100 }],
+    queryFn: () => lessonsApi.list({ gradeLevelId: selectedGradeLevelId, limit: 100 }),
+    enabled: !!selectedGradeLevelId,
   });
   const lessons: Lesson[] = lessonsData?.data?.data ?? [];
 

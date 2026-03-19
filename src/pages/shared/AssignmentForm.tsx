@@ -52,6 +52,8 @@ export default function AssignmentForm() {
     queryFn: () => classesApi.list({ limit: 100 }),
   });
   const classes: ClassSection[] = classesData?.data?.data ?? [];
+  // Grade level of selected class — used to filter relevant lessons
+  const selectedGradeLevelId = classes.find((c) => c.id === selectedClassId)?.gradeLevel?.id;
 
   const { data: yearsData } = useQuery({
     queryKey: ["academic-years", { isCurrent: true }],
@@ -66,11 +68,11 @@ export default function AssignmentForm() {
   });
   const terms: Term[] = termsData?.data?.data ?? [];
 
-  // Fetch lessons filtered by selected class
+  // Fetch lessons filtered by the grade level of the selected class
   const { data: lessonsData } = useQuery({
-    queryKey: ["lessons", { classId: selectedClassId, limit: 100 }],
-    queryFn: () => lessonsApi.list({ classId: selectedClassId, limit: 100 }),
-    enabled: !!selectedClassId,
+    queryKey: ["lessons", { gradeLevelId: selectedGradeLevelId, limit: 100 }],
+    queryFn: () => lessonsApi.list({ gradeLevelId: selectedGradeLevelId, limit: 100 }),
+    enabled: !!selectedGradeLevelId,
   });
   const lessons = lessonsData?.data?.data ?? [];
 
