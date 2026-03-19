@@ -92,6 +92,18 @@ export default function Toaster() {
                       </span>
                     </div>
                   )}
+
+                  {/* Action button — e.g. Retry */}
+                  {t.action && (
+                    <button
+                      type="button"
+                      onClick={t.action.onClick}
+                      className="mt-2 inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded border border-current hover:opacity-80 transition-opacity"
+                      style={{ color: "inherit" }}
+                    >
+                      {t.action.label}
+                    </button>
+                  )}
                 </div>
 
                 <RadixToast.Close asChild>

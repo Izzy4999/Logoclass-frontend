@@ -9,7 +9,8 @@
  *
  * A single progress toast (top-right) tracks each job. On success it
  * transitions to a green success toast that auto-dismisses. On failure
- * it stays red and persistent until the user dismisses it.
+ * it stays red and persistent with a "Retry" button — clicking Retry
+ * dismisses the error toast and re-enqueues the exact same job.
  */
 
 import { uploadsApi } from "@/api/uploads";
@@ -136,12 +137,25 @@ class UploadManager {
       }
 
       if (failed.length > 0) {
+        // Show error toast with a Retry button — re-enqueues the original job
+        const originalJob: UploadJob = {
+          lessonPayload: job.lessonPayload,
+          pendingFiles: job.pendingFiles,
+          onSaved: job.onSaved,
+        };
         toast.update(toastId, {
           title: `${failed.length} file${failed.length > 1 ? "s" : ""} failed to upload`,
           description: failed[0],
           variant: "error",
           progress: undefined,
           persistent: true,
+          action: {
+            label: "Retry",
+            onClick: () => {
+              toast.dismiss(toastId);
+              this.enqueue(originalJob);
+            },
+          },
         });
         return; // Don't save the lesson if any upload failed
       }
@@ -203,12 +217,36 @@ class UploadManager {
         (err as { response?: { data?: { message?: string } } })
           ?.response?.data?.message ?? "Failed to save lesson";
 
+      // For a save failure, re-enqueue with only the files that haven't been
+      // uploaded yet (the ones that did upload are now tracked as existing IDs).
+      const retryJob: UploadJob = {
+        lessonPayload: {
+          ...job.lessonPayload,
+          // Merge any newly uploaded material IDs into existing so we don't
+          // re-upload files that already landed in S3.
+          existingMaterialIds: [
+            ...job.lessonPayload.existingMaterialIds,
+            ...newMaterialIds,
+          ],
+        },
+        // No pending files to re-upload — only the lesson save failed.
+        pendingFiles: [],
+        onSaved: job.onSaved,
+      };
+
       toast.update(toastId, {
         title: "Failed to save lesson",
         description: msg,
         variant: "error",
         progress: undefined,
         persistent: true,
+        action: {
+          label: "Retry",
+          onClick: () => {
+            toast.dismiss(toastId);
+            this.enqueue(retryJob);
+          },
+        },
       });
     }
   }
