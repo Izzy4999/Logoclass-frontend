@@ -1,4 +1,4 @@
-import Lottie from "lottie-react";
+import { useLottie } from "lottie-react";
 import bookAnimation from "@/assets/book-loader.json";
 import { cn } from "@/lib/utils";
 
@@ -8,6 +8,16 @@ interface LoadingSpinnerProps {
   className?: string;
 }
 
+function BookLottie({ size }: { size: number }) {
+  const { View } = useLottie({
+    animationData: bookAnimation,
+    loop: true,
+    autoplay: true,
+    style: { width: size, height: size },
+  });
+  return <>{View}</>;
+}
+
 export default function LoadingSpinner({
   fullScreen,
   size = 180,
@@ -15,12 +25,7 @@ export default function LoadingSpinner({
 }: LoadingSpinnerProps) {
   const content = (
     <div className="flex flex-col items-center gap-2">
-      <Lottie
-        animationData={bookAnimation}
-        loop
-        autoplay
-        style={{ width: size, height: size }}
-      />
+      <BookLottie size={size} />
       <BouncingLabel />
     </div>
   );
