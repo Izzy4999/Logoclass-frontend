@@ -15,6 +15,6 @@ export default defineConfig({
     strictPort: true,
   },
   optimizeDeps: {
-    include: ["lottie-react", "lottie-web"],
+    include: ["lottie-react"],
   },
 });
