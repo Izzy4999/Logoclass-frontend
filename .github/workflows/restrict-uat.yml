@@ -1,0 +1,17 @@
+name: Restrict merge source
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch
+        run: |
+          if [[ "${{ github.head_ref }}" != "uat" ]]; then
+            echo "❌ Only UAT branch can be merged into main"
+            exit 1
+          fi
