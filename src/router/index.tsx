@@ -49,7 +49,7 @@ export const router = createBrowserRouter([
           { path: "/dashboard", element: L(() => import("@/pages/shared/Dashboard")) },
           { path: "/profile", element: L(() => import("@/pages/shared/Profile")) },
           { path: "/messages", element: L(() => import("@/pages/shared/Messages")) },
-          { path: "/messages/:id", element: L(() => import("@/pages/shared/Conversation")) },
+          { path: "/messages/:id", element: <Navigate to="/messages" replace /> },
           { path: "/notifications", element: L(() => import("@/pages/shared/Notifications")) },
 
           // Super Admin

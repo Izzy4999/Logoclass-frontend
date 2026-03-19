@@ -60,7 +60,7 @@ export interface Announcement {
 
 export interface Message {
   id: string;
-  sender: { id: string; firstName: string; lastName: string };
+  sender: { id: string; firstName: string; lastName: string; avatar?: string | null };
   content: string;
   attachments: string[];
   createdAt: string;
@@ -68,8 +68,19 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  participants: { id: string; firstName: string; lastName: string }[];
-  lastMessage: Message | null;
+  name: string | null;
+  isGroup: boolean;
+  classId: string | null;
+  participants: { id: string; firstName: string; lastName: string; avatar?: string | null }[];
+  lastMessage: { id: string; content: string; sender: { id: string; firstName: string; lastName: string }; createdAt: string } | null;
   unreadCount: number;
   createdAt: string;
+}
+
+export interface ContactUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  avatar: string | null;
+  role: { name: string } | null;
 }
