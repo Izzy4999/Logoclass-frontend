@@ -12,7 +12,8 @@ export type Permission =
   | "MANAGE_PAYMENTS"
   | "MARK_ATTENDANCE"
   | "VIEW_ACTION_LOGS"
-  | "MANAGE_TENANT_SETTINGS";
+  | "MANAGE_TENANT_SETTINGS"
+  | "MANAGE_TIMETABLE";
 
 export interface Role {
   id: string;

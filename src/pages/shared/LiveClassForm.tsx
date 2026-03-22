@@ -11,6 +11,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { liveClassesApi } from "@/api/live-classes";
 import { classesApi, academicYearsApi } from "@/api/classes";
 import { lessonsApi } from "@/api/lessons";
+import { useAuth } from "@/hooks/useAuth";
 import type { ClassSection, Term, AcademicYear } from "@/types/class";
 import type { Lesson } from "@/types/lesson";
 
@@ -31,6 +32,7 @@ export default function LiveClassForm() {
   const isEdit = !!id;
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { user, isTeacher } = useAuth();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [serverError, setServerError] = useState("");
 
@@ -48,10 +50,10 @@ export default function LiveClassForm() {
   });
   const lc = lcData?.data?.data;
 
-  // ── Classes ──────────────────────────────────────────────────────────────
+  // ── Classes — teachers see only their assigned classes ───────────────────
   const { data: classesData } = useQuery({
-    queryKey: ["classes", { limit: 100 }],
-    queryFn: () => classesApi.list({ limit: 100 }),
+    queryKey: ["classes", { limit: 100, teacherId: isTeacher ? user?.id : undefined }],
+    queryFn: () => classesApi.list({ limit: 100, teacherId: isTeacher ? user?.id : undefined }),
   });
   const classes: ClassSection[] = classesData?.data?.data ?? [];
   // Grade level of selected class — used to filter relevant lessons
