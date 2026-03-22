@@ -27,7 +27,6 @@ import type { PaginationMeta } from "@/types/api";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-// FullCalendar daysOfWeek: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
 const DAY_FC: Record<DayOfWeek, number> = {
   MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6,
 };
@@ -70,14 +69,43 @@ const entrySchema = z.object({
 type EntryFormData = z.infer<typeof entrySchema>;
 
 const cloneSchema = z.object({
-  sourceTermId: z.string().min(1),
-  targetTermId: z.string().min(1),
-  targetAcademicYearId: z.string().min(1),
+  sourceTermId: z.string().min(1, "Source term required"),
+  targetTermId: z.string().min(1, "Target term required"),
+  targetAcademicYearId: z.string().min(1, "Target year required"),
 });
 type CloneFormData = z.infer<typeof cloneSchema>;
 
 type ViewMode = "grade" | "class" | "teacher";
 type CalView = "dayGridMonth" | "timeGridWeek" | "timeGridDay" | "listWeek";
+
+// ── SegmentedControl ──────────────────────────────────────────────────────────
+
+function SegmentedControl<T extends string>({
+  options, value, onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="inline-flex items-center bg-slate-100 rounded-xl p-1 gap-0.5">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+            value === opt.value
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -88,36 +116,41 @@ export default function TimetablePage() {
 
   const canManage = can("MANAGE_TIMETABLE");
 
-  const defaultViewMode: ViewMode = isTeacher ? "class" : canManage ? "grade" : "class";
+  const defaultViewMode: ViewMode =
+    isStudent || isParent ? "class" : isTeacher ? "class" : "grade";
+
   const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode);
   const [calView, setCalView] = useState<CalView>("timeGridWeek");
   const [calTitle, setCalTitle] = useState("");
 
+  // Filters
   const [selectedTermId, setSelectedTermId] = useState("");
   const [selectedAcademicYearId, setSelectedAcademicYearId] = useState("");
   const [selectedClassId, setSelectedClassId] = useState("");
   const [selectedGradeLevelId, setSelectedGradeLevelId] = useState("");
-  const [selectedTeacherId, setSelectedTeacherId] = useState(isTeacher ? (user?.id ?? "") : "");
+  const [selectedTeacherId, setSelectedTeacherId] = useState(
+    isTeacher ? (user?.id ?? "") : ""
+  );
 
+  // Modals
+  const [createOpen, setCreateOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloneSourceYearId, setCloneSourceYearId] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<TimetableEntry | null>(null);
   const [serverError, setServerError] = useState("");
 
-  // Admin: inline form visible alongside calendar
-  const [formVisible, setFormVisible] = useState(false);
-
-  // Lookups for displaying subject/teacher names in preview
+  // Subject/teacher name cache for draft preview
   const [subjectMap, setSubjectMap] = useState<Record<string, string>>({});
   const [teacherMap, setTeacherMap] = useState<Record<string, string>>({});
 
   // ── Queries ──────────────────────────────────────────────────────────────
 
-  const enabled = Boolean(selectedTermId && (
-    (viewMode === "class" && selectedClassId) ||
-    (viewMode === "grade" && selectedGradeLevelId) ||
-    (viewMode === "teacher" && selectedTeacherId)
-  ));
+  const enabled = Boolean(
+    selectedTermId &&
+    ((viewMode === "class" && selectedClassId) ||
+     (viewMode === "grade" && selectedGradeLevelId) ||
+     (viewMode === "teacher" && selectedTeacherId))
+  );
 
   const { data: entries = [], isLoading } = useQuery({
     queryKey: ["timetable", viewMode, selectedClassId, selectedGradeLevelId, selectedTeacherId, selectedTermId],
@@ -129,10 +162,10 @@ export default function TimetablePage() {
     enabled,
   });
 
-  // ── Calendar events (recurring by daysOfWeek) ─────────────────────────────
+  // ── Calendar events ───────────────────────────────────────────────────────
 
-  const calendarEvents = useMemo(() => {
-    return entries.map((e) => ({
+  const calendarEvents = useMemo(() =>
+    entries.map((e) => ({
       id: e.id,
       title: e.subject.name,
       daysOfWeek: [DAY_FC[e.dayOfWeek]],
@@ -142,45 +175,50 @@ export default function TimetablePage() {
       borderColor: subjectColor(e.subjectId),
       textColor: "#fff",
       extendedProps: { entry: e },
-    }));
-  }, [entries]);
+    })),
+  [entries]);
+
+  // ── Form ──────────────────────────────────────────────────────────────────
+
+  const {
+    register, handleSubmit, reset, setValue, watch,
+    formState: { errors },
+  } = useForm<EntryFormData>({
+    resolver: zodResolver(entrySchema),
+    defaultValues: { scopeType: "grade", dayOfWeek: "MON" },
+  });
+
+  const scopeType    = watch("scopeType");
+  const watchSubject = watch("subjectId");
+  const watchTeacher = watch("teacherId");
+  const watchDay     = watch("dayOfWeek");
+  const watchStart   = watch("startTime");
+  const watchEnd     = watch("endTime");
+
+  // Draft preview on calendar while create modal is open
+  const draftEvent = useMemo(() => {
+    if (!createOpen || !watchDay || !watchStart || !watchEnd || !watchSubject) return null;
+    return {
+      id: "__draft__",
+      title: subjectMap[watchSubject] ?? "New Slot",
+      daysOfWeek: [DAY_FC[watchDay]],
+      startTime: watchStart,
+      endTime: watchEnd,
+      backgroundColor: "#22C55E",
+      borderColor: "#16A34A",
+      textColor: "#fff",
+      classNames: ["opacity-70"],
+    };
+  }, [createOpen, watchDay, watchStart, watchEnd, watchSubject, subjectMap]);
+
+  const allEvents = useMemo(
+    () => (draftEvent ? [...calendarEvents, draftEvent] : calendarEvents),
+    [calendarEvents, draftEvent]
+  );
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["timetable"] });
-
-  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<EntryFormData>({
-    resolver: zodResolver(entrySchema),
-    defaultValues: { scopeType: viewMode === "class" ? "class" : "grade", dayOfWeek: "MON" },
-  });
-
-  const scopeType = watch("scopeType");
-  const watchedSubjectId = watch("subjectId");
-  const watchedTeacherId = watch("teacherId");
-  const watchedDay = watch("dayOfWeek");
-  const watchedStart = watch("startTime");
-  const watchedEnd = watch("endTime");
-
-  // Draft preview event shown on calendar while form is open
-  const draftEvent = useMemo(() => {
-    if (!formVisible || !watchedDay || !watchedStart || !watchedEnd || !watchedSubjectId) return null;
-    return {
-      id: "__draft__",
-      title: subjectMap[watchedSubjectId] ?? "New Slot",
-      daysOfWeek: [DAY_FC[watchedDay]],
-      startTime: watchedStart,
-      endTime: watchedEnd,
-      backgroundColor: "#22C55E",
-      borderColor: "#16A34A",
-      textColor: "#fff",
-      classNames: ["opacity-70", "border-dashed"],
-    };
-  }, [formVisible, watchedDay, watchedStart, watchedEnd, watchedSubjectId, subjectMap]);
-
-  const allEvents = useMemo(
-    () => draftEvent ? [...calendarEvents, draftEvent] : calendarEvents,
-    [calendarEvents, draftEvent]
-  );
 
   const createMutation = useMutation({
     mutationFn: (data: EntryFormData) => {
@@ -188,12 +226,13 @@ export default function TimetablePage() {
       return timetableApi.create({
         ...rest,
         gradeLevelId: st === "grade" ? rest.gradeLevelId : undefined,
-        classId: st === "class" ? rest.classId : undefined,
+        classId:      st === "class" ? rest.classId      : undefined,
       });
     },
     onSuccess: () => {
       toast.success("Slot added");
-      reset({ scopeType: viewMode === "class" ? "class" : "grade", dayOfWeek: "MON", termId: selectedTermId, academicYearId: selectedAcademicYearId });
+      setCreateOpen(false);
+      reset({ scopeType: "grade", dayOfWeek: "MON", termId: selectedTermId, academicYearId: selectedAcademicYearId });
       invalidate();
     },
     onError: (e: any) => setServerError(e.response?.data?.message ?? "Failed to create"),
@@ -207,16 +246,21 @@ export default function TimetablePage() {
   const cloneForm = useForm<CloneFormData>({ resolver: zodResolver(cloneSchema) });
 
   const cloneMutation = useMutation({
-    mutationFn: (data: CloneFormData) => timetableApi.clone({
-      ...data,
-      gradeLevelId: viewMode === "grade" ? selectedGradeLevelId : undefined,
-      classId: viewMode === "class" ? selectedClassId : undefined,
-    }),
-    onSuccess: (r) => { toast.success(r.data.data?.message ?? "Cloned"); setCloneOpen(false); invalidate(); },
+    mutationFn: (data: CloneFormData) =>
+      timetableApi.clone({
+        ...data,
+        gradeLevelId: viewMode === "grade" ? selectedGradeLevelId : undefined,
+        classId:      viewMode === "class" ? selectedClassId      : undefined,
+      }),
+    onSuccess: (r) => {
+      toast.success(r.data.data?.message ?? "Cloned");
+      setCloneOpen(false);
+      invalidate();
+    },
     onError: (e: any) => setServerError(e.response?.data?.message ?? "Clone failed"),
   });
 
-  // ── Calendar navigation helpers ──────────────────────────────────────────
+  // ── Calendar helpers ──────────────────────────────────────────────────────
 
   function calApi() { return calendarRef.current?.getApi(); }
 
@@ -271,21 +315,33 @@ export default function TimetablePage() {
       .then(r => { const d = r.data.data ?? []; return { data: d, meta: fakeMeta(d.length) }; });
   };
 
-  const availableViewModes: ViewMode[] = canManage
-    ? ["grade", "class", "teacher"]
-    : isTeacher ? ["class", "teacher"] : [];
+  // ── View mode tabs (admin sees all three, teacher sees class + my schedule) ─
 
-  function openForm() {
+  const viewOptions: { value: ViewMode; label: string }[] =
+    canManage
+      ? [
+          { value: "grade",   label: "Grade"       },
+          { value: "class",   label: "Class"       },
+          { value: "teacher", label: "My Schedule" },
+        ]
+      : isTeacher
+      ? [
+          { value: "class",   label: "Class"       },
+          { value: "teacher", label: "My Schedule" },
+        ]
+      : [];
+
+  function openCreate() {
     reset({
-      scopeType: viewMode === "class" ? "class" : "grade",
-      dayOfWeek: "MON",
-      termId: selectedTermId,
+      scopeType:      viewMode === "class" ? "class" : "grade",
+      dayOfWeek:      "MON",
+      termId:         selectedTermId,
       academicYearId: selectedAcademicYearId,
-      classId: viewMode === "class" ? selectedClassId : undefined,
-      gradeLevelId: viewMode === "grade" ? selectedGradeLevelId : undefined,
+      classId:        viewMode === "class" ? selectedClassId       : undefined,
+      gradeLevelId:   viewMode === "grade" ? selectedGradeLevelId  : undefined,
     });
     setServerError("");
-    setFormVisible(true);
+    setCreateOpen(true);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -299,14 +355,19 @@ export default function TimetablePage() {
           canManage ? (
             <div className="flex gap-2">
               <button
-                onClick={() => { cloneForm.reset(); setCloneSourceYearId(""); setServerError(""); setCloneOpen(true); }}
+                onClick={() => {
+                  cloneForm.reset();
+                  setCloneSourceYearId("");
+                  setServerError("");
+                  setCloneOpen(true);
+                }}
                 className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 bg-white hover:bg-slate-50"
               >
                 <Copy size={16} /> Reuse Timetable
               </button>
 
               <button
-                onClick={openForm}
+                onClick={openCreate}
                 className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
               >
                 <Plus size={16} /> Add Slot
@@ -318,25 +379,20 @@ export default function TimetablePage() {
 
       {/* ── Filters bar ── */}
       <div className="card p-3 flex flex-wrap gap-3 items-end">
-        {availableViewModes.length > 1 && (
+
+        {/* View mode tabs */}
+        {viewOptions.length > 0 && (
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-slate-500">View by</label>
-            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-              {availableViewModes.map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setViewMode(m)}
-                  className={`px-3 py-1.5 text-sm font-medium capitalize ${
-                    viewMode === m ? "bg-primary-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {m === "teacher" && isTeacher ? "My Schedule" : m}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              options={viewOptions}
+              value={viewMode}
+              onChange={(v) => setViewMode(v)}
+            />
           </div>
         )}
 
+        {/* Academic Year */}
         <div className="flex flex-col gap-1 w-44">
           <label className="text-xs font-medium text-slate-500">Academic Year</label>
           <InfiniteSelect
@@ -350,6 +406,7 @@ export default function TimetablePage() {
           />
         </div>
 
+        {/* Term */}
         {selectedAcademicYearId && (
           <div className="flex flex-col gap-1 w-36">
             <label className="text-xs font-medium text-slate-500">Term</label>
@@ -359,12 +416,14 @@ export default function TimetablePage() {
               onChange={setSelectedTermId}
               queryKey={["terms-tt", selectedAcademicYearId]}
               fetcher={termFetcher}
+              enabled={Boolean(selectedAcademicYearId)}
               getLabel={(t: any) => t.name}
               getValue={(t: any) => t.id}
             />
           </div>
         )}
 
+        {/* Grade filter */}
         {viewMode === "grade" && (
           <div className="flex flex-col gap-1 w-44">
             <label className="text-xs font-medium text-slate-500">Grade Level</label>
@@ -380,7 +439,8 @@ export default function TimetablePage() {
           </div>
         )}
 
-        {viewMode === "class" && !isStudent && (
+        {/* Class filter */}
+        {viewMode === "class" && !isStudent && !isParent && (
           <div className="flex flex-col gap-1 w-44">
             <label className="text-xs font-medium text-slate-500">Class</label>
             <InfiniteSelect
@@ -395,6 +455,7 @@ export default function TimetablePage() {
           </div>
         )}
 
+        {/* Teacher filter */}
         {viewMode === "teacher" && (
           <div className="flex flex-col gap-1 w-44">
             <label className="text-xs font-medium text-slate-500">Teacher</label>
@@ -417,65 +478,240 @@ export default function TimetablePage() {
         )}
       </div>
 
-      {/* ── Main: form panel + calendar ── */}
-      <div className={`flex gap-4 items-start ${formVisible && canManage ? "" : ""}`}>
+      {/* ── Calendar card ── */}
+      <div className="card overflow-hidden">
+        {/* Custom calendar toolbar */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+          {/* Prev / Next / Today */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { calApi()?.prev(); updateTitle(); }}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              onClick={() => { calApi()?.next(); updateTitle(); }}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600"
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              onClick={() => { calApi()?.today(); updateTitle(); }}
+              className="px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 ml-1"
+            >
+              today
+            </button>
+          </div>
 
-        {/* Add Slot panel (admin, slides in alongside calendar) */}
-        {formVisible && canManage && (
-          <div className="w-80 shrink-0 card p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800">Add Timetable Slot</h3>
-              <button onClick={() => setFormVisible(false)} className="text-slate-400 hover:text-slate-600 text-lg leading-none">&times;</button>
+          {/* Title */}
+          <h2 className="text-base font-semibold text-slate-800">{calTitle}</h2>
+
+          {/* View switcher */}
+          <SegmentedControl
+            options={[
+              { value: "dayGridMonth" as CalView, label: "month"  },
+              { value: "timeGridWeek" as CalView, label: "week"   },
+              { value: "timeGridDay"  as CalView, label: "day"    },
+              { value: "listWeek"     as CalView, label: "list"   },
+            ]}
+            value={calView}
+            onChange={switchView}
+          />
+        </div>
+
+        {/* Calendar body */}
+        <div className="p-4">
+          {!selectedTermId ? (
+            <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+              <CalendarDays size={48} className="mb-3 opacity-30" />
+              <p className="text-sm">Select an academic year and term to view the timetable</p>
+              {canManage && (
+                <button
+                  onClick={openCreate}
+                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
+                >
+                  <Plus size={16} /> Add Slot
+                </button>
+              )}
+            </div>
+          ) : isLoading ? (
+            <div className="flex justify-center py-24"><LoadingSpinner /></div>
+          ) : (
+            <FullCalendar
+              ref={calendarRef}
+              plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+              initialView={calView}
+              headerToolbar={false}
+              weekNumbers
+              weekNumberFormat={{ week: "numeric" }}
+              weekText="W"
+              hiddenDays={[0]}
+              allDaySlot={false}
+              slotMinTime="06:00:00"
+              slotMaxTime="20:00:00"
+              slotDuration="00:30:00"
+              height="auto"
+              events={allEvents}
+              dayHeaderFormat={{ weekday: "short" }}
+              datesSet={updateTitle}
+              dateClick={() => { if (canManage) openCreate(); }}
+              eventClick={(arg: EventClickArg) => {
+                if (!canManage) return;
+                const e: TimetableEntry = arg.event.extendedProps.entry;
+                if (e) setDeleteTarget(e);
+              }}
+              eventContent={(arg) => {
+                const e: TimetableEntry | undefined = arg.event.extendedProps.entry;
+                const isDraft = arg.event.id === "__draft__";
+
+                if (arg.view.type === "dayGridMonth") {
+                  return (
+                    <div className="text-xs px-1 truncate font-medium">
+                      {arg.timeText && <span className="opacity-75 mr-1">{arg.timeText}</span>}
+                      <span>{arg.event.title}</span>
+                    </div>
+                  );
+                }
+
+                if (arg.view.type === "listWeek") {
+                  return (
+                    <div className="flex items-center gap-3 py-0.5">
+                      <span className="font-medium">{arg.event.title}</span>
+                      {e && (
+                        <>
+                          <span className="text-slate-500 text-xs">{e.teacher.firstName} {e.teacher.lastName}</span>
+                          {e.class && <span className="text-xs text-slate-400">{e.class.name}</span>}
+                          {e.gradeLevel && !e.class && <span className="text-xs text-slate-400">{e.gradeLevel.name} (all)</span>}
+                        </>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="p-1 text-xs leading-tight overflow-hidden h-full relative group">
+                    <div className="font-semibold truncate">{arg.event.title}</div>
+                    {e && (
+                      <>
+                        <div className="truncate opacity-90">{e.teacher.firstName} {e.teacher.lastName}</div>
+                        {e.class && <div className="truncate opacity-75">{e.class.name}</div>}
+                        {e.gradeLevel && !e.class && <div className="truncate opacity-75">{e.gradeLevel.name} (all)</div>}
+                        {e.periodLabel && <div className="truncate opacity-60">{e.periodLabel}</div>}
+                      </>
+                    )}
+                    {isDraft && (
+                      <div className="truncate opacity-75 italic">
+                        {teacherMap[watchTeacher] ?? "Teacher TBD"}
+                      </div>
+                    )}
+                    {canManage && !isDraft && e && (
+                      <button
+                        onClick={(ev) => { ev.stopPropagation(); setDeleteTarget(e); }}
+                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-white/70 hover:text-white transition-opacity"
+                      >
+                        <Trash2 size={10} />
+                      </button>
+                    )}
+                  </div>
+                );
+              }}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* ── Create Slot Modal (admin only) ── */}
+      {canManage && (
+        <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Timetable Slot">
+          <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="space-y-4">
+            {serverError && (
+              <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>
+            )}
+
+            {/* Scope */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Applies to</label>
+              <SegmentedControl
+                options={[
+                  { value: "grade", label: "Grade Level (all classes)" },
+                  { value: "class", label: "Specific Class" },
+                ]}
+                value={scopeType}
+                onChange={(v) => setValue("scopeType", v)}
+              />
             </div>
 
-            {serverError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>}
-
-            <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="space-y-3">
-              {/* Scope */}
+            {scopeType === "grade" ? (
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Applies to</label>
-                <div className="flex rounded-lg border border-slate-200 overflow-hidden text-sm">
-                  {(["grade", "class"] as const).map((s) => (
-                    <button key={s} type="button" onClick={() => setValue("scopeType", s)}
-                      className={`flex-1 py-2 font-medium transition-colors ${
-                        scopeType === s ? "bg-primary-600 text-white" : "bg-white text-slate-600"
-                      }`}>
-                      {s === "grade" ? "Grade (all classes)" : "Specific Class"}
-                    </button>
-                  ))}
-                </div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Grade Level</label>
+                <InfiniteSelect
+                  placeholder="Select grade"
+                  value={watch("gradeLevelId") ?? ""}
+                  onChange={(v) => setValue("gradeLevelId", v)}
+                  queryKey={["grade-form-tt"]}
+                  fetcher={gradeFetcher}
+                  getLabel={(g: any) => g.name}
+                  getValue={(g: any) => g.id}
+                />
+                {errors.gradeLevelId && <p className="text-xs text-red-500 mt-1">{errors.gradeLevelId.message}</p>}
               </div>
-
-              {scopeType === "grade" ? (
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Grade Level</label>
-                  <InfiniteSelect
-                    placeholder="Select grade"
-                    value={watch("gradeLevelId") ?? ""}
-                    onChange={(v) => setValue("gradeLevelId", v)}
-                    queryKey={["grade-form-tt"]}
-                    fetcher={gradeFetcher}
-                    getLabel={(g: any) => g.name}
-                    getValue={(g: any) => g.id}
-                  />
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Class</label>
-                  <InfiniteSelect
-                    placeholder="Select class"
-                    value={watch("classId") ?? ""}
-                    onChange={(v) => setValue("classId", v)}
-                    queryKey={["class-form-tt"]}
-                    fetcher={classFetcher}
-                    getLabel={(c: any) => c.name}
-                    getValue={(c: any) => c.id}
-                  />
-                </div>
-              )}
-
+            ) : (
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Subject</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Class</label>
+                <InfiniteSelect
+                  placeholder="Select class"
+                  value={watch("classId") ?? ""}
+                  onChange={(v) => setValue("classId", v)}
+                  queryKey={["class-form-tt"]}
+                  fetcher={classFetcher}
+                  getLabel={(c: any) => c.name}
+                  getValue={(c: any) => c.id}
+                />
+                {errors.classId && <p className="text-xs text-red-500 mt-1">{errors.classId.message}</p>}
+              </div>
+            )}
+
+            {/* Academic Year + Term */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Academic Year</label>
+                <InfiniteSelect
+                  placeholder="Select year"
+                  value={watch("academicYearId") ?? ""}
+                  onChange={(v) => { setValue("academicYearId", v); setValue("termId", ""); }}
+                  queryKey={["year-form-tt"]}
+                  fetcher={yearFetcher}
+                  getLabel={(y: any) => y.name}
+                  getValue={(y: any) => y.id}
+                />
+                {errors.academicYearId && <p className="text-xs text-red-500 mt-1">{errors.academicYearId.message}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Term</label>
+                <InfiniteSelect
+                  placeholder="Select term"
+                  value={watch("termId") ?? ""}
+                  onChange={(v) => setValue("termId", v)}
+                  queryKey={["term-form-tt", watch("academicYearId")]}
+                  fetcher={(_) => {
+                    const yId = watch("academicYearId");
+                    if (!yId) return Promise.resolve({ data: [], meta: fakeMeta(0) });
+                    return academicYearsApi.listTerms(yId)
+                      .then(r => { const d = r.data.data ?? []; return { data: d, meta: fakeMeta(d.length) }; });
+                  }}
+                  enabled={Boolean(watch("academicYearId"))}
+                  getLabel={(t: any) => t.name}
+                  getValue={(t: any) => t.id}
+                />
+                {errors.termId && <p className="text-xs text-red-500 mt-1">{errors.termId.message}</p>}
+              </div>
+            </div>
+
+            {/* Subject + Teacher */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Subject</label>
                 <InfiniteSelect
                   placeholder="Select subject"
                   value={watch("subjectId") ?? ""}
@@ -490,9 +726,8 @@ export default function TimetablePage() {
                 />
                 {errors.subjectId && <p className="text-xs text-red-500 mt-1">{errors.subjectId.message}</p>}
               </div>
-
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Teacher</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Teacher</label>
                 <InfiniteSelect
                   placeholder="Select teacher"
                   value={watch("teacherId") ?? ""}
@@ -507,178 +742,81 @@ export default function TimetablePage() {
                 />
                 {errors.teacherId && <p className="text-xs text-red-500 mt-1">{errors.teacherId.message}</p>}
               </div>
+            </div>
 
+            {/* Day + Time */}
+            <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Day</label>
-                <select {...register("dayOfWeek")} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Day</label>
+                <select
+                  {...register("dayOfWeek")}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
                   {(["MON", "TUE", "WED", "THU", "FRI", "SAT"] as DayOfWeek[]).map((d) => (
                     <option key={d} value={d}>{DAY_LABELS[d]}</option>
                   ))}
                 </select>
               </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Start</label>
-                  <input type="time" {...register("startTime")} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">End</label>
-                  <input type="time" {...register("endTime")} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-                </div>
-              </div>
-
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Period Label <span className="text-slate-400">(optional)</span></label>
-                <input {...register("periodLabel")} placeholder="e.g. Period 1" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Start Time</label>
+                <input
+                  type="time"
+                  {...register("startTime")}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                {errors.startTime && <p className="text-xs text-red-500 mt-1">{errors.startTime.message}</p>}
               </div>
-
-              {/* hidden fields */}
-              <input type="hidden" {...register("termId")} value={selectedTermId} />
-              <input type="hidden" {...register("academicYearId")} value={selectedAcademicYearId} />
-
-              {/* Draft preview indicator */}
-              {watchedSubjectId && watchedStart && watchedEnd && (
-                <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  Preview shown on calendar in green
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setFormVisible(false)} className="flex-1 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50">
-                  Cancel
-                </button>
-                <button type="submit" disabled={createMutation.isPending} className="flex-1 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2">
-                  {createMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                  Add Slot
-                </button>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">End Time</label>
+                <input
+                  type="time"
+                  {...register("endTime")}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                {errors.endTime && <p className="text-xs text-red-500 mt-1">{errors.endTime.message}</p>}
               </div>
-            </form>
-          </div>
-        )}
-
-        {/* ── Calendar ── */}
-        <div className="flex-1 card overflow-hidden">
-          {/* Calendar custom header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-            {/* Left: prev/next/today */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => { calApi()?.prev(); updateTitle(); }}
-                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <button
-                onClick={() => { calApi()?.next(); updateTitle(); }}
-                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600"
-              >
-                <ChevronRight size={16} />
-              </button>
-              <button
-                onClick={() => { calApi()?.today(); updateTitle(); }}
-                className="px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600"
-              >
-                today
-              </button>
             </div>
 
-            {/* Center: title */}
-            <h2 className="text-base font-semibold text-slate-800">{calTitle}</h2>
-
-            {/* Right: view switcher */}
-            <div className="flex items-center gap-1 border border-slate-200 rounded-lg overflow-hidden">
-              {([
-                { v: "dayGridMonth" as CalView, label: "month", icon: <LayoutGrid size={14} /> },
-                { v: "timeGridWeek" as CalView, label: "week", icon: <CalendarDays size={14} /> },
-                { v: "timeGridDay" as CalView, label: "day", icon: <Clock size={14} /> },
-                { v: "listWeek" as CalView, label: "list", icon: <List size={14} /> },
-              ]).map(({ v, label }) => (
-                <button
-                  key={v}
-                  onClick={() => switchView(v)}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                    calView === v ? "bg-primary-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Calendar body */}
-          <div className="p-4">
-            {!selectedTermId ? (
-              <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-                <CalendarDays size={48} className="mb-3 opacity-30" />
-                <p className="text-sm">Select an academic year and term to view the timetable</p>
-              </div>
-            ) : isLoading ? (
-              <div className="flex justify-center py-24"><LoadingSpinner /></div>
-            ) : (
-              <FullCalendar
-                ref={calendarRef}
-                plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-                initialView={calView}
-                headerToolbar={false}
-                weekNumbers
-                weekNumberFormat={{ week: "numeric" }}
-                weekText="W"
-                hiddenDays={[0]}
-                allDaySlot={false}
-                slotMinTime="06:00:00"
-                slotMaxTime="20:00:00"
-                slotDuration="00:30:00"
-                height="auto"
-                events={allEvents}
-                dayHeaderFormat={{ weekday: "short" }}
-                datesSet={updateTitle}
-                eventClick={(arg: EventClickArg) => {
-                  if (!canManage) return;
-                  const e: TimetableEntry = arg.event.extendedProps.entry;
-                  if (e) setDeleteTarget(e);
-                }}
-                eventContent={(arg) => {
-                  const e: TimetableEntry | undefined = arg.event.extendedProps.entry;
-                  const isDraft = arg.event.id === "__draft__";
-                  if (arg.view.type === "dayGridMonth") {
-                    return (
-                      <div className="text-xs px-1 truncate font-medium">
-                        {arg.timeText && <span className="opacity-75 mr-1">{arg.timeText}</span>}
-                        <span className="font-semibold">{arg.event.title}</span>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="p-1 text-xs leading-tight overflow-hidden h-full">
-                      <div className="font-semibold truncate">{arg.event.title}</div>
-                      {e && (
-                        <>
-                          <div className="truncate opacity-90">{e.teacher.firstName} {e.teacher.lastName}</div>
-                          {e.class && <div className="truncate opacity-75">{e.class.name}</div>}
-                          {e.gradeLevel && !e.class && <div className="truncate opacity-75">{e.gradeLevel.name} (all)</div>}
-                          {e.periodLabel && <div className="truncate opacity-75">{e.periodLabel}</div>}
-                        </>
-                      )}
-                      {isDraft && <div className="truncate opacity-75 italic">{teacherMap[watchedTeacherId] ?? "Teacher TBD"}</div>}
-                      {canManage && !isDraft && (
-                        <button
-                          onClick={(ev) => { ev.stopPropagation(); if (e) setDeleteTarget(e); }}
-                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-white/70 hover:text-white"
-                        >
-                          <Trash2 size={10} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                }}
+            {/* Period label */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Period Label <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <input
+                {...register("periodLabel")}
+                placeholder="e.g. Period 1"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
+            </div>
+
+            {/* Live preview indicator */}
+            {watchSubject && watchStart && watchEnd && (
+              <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-200">
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                Live preview shown on calendar in green
+              </div>
             )}
-          </div>
-        </div>
-      </div>
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setCreateOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={createMutation.isPending}
+                className="px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {createMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                Add Slot
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* ── Clone Modal ── */}
       {canManage && (
@@ -689,40 +827,73 @@ export default function TimetablePage() {
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Source Academic Year</label>
-              <InfiniteSelect placeholder="Select year" value={cloneSourceYearId}
+              <InfiniteSelect
+                placeholder="Select year"
+                value={cloneSourceYearId}
                 onChange={(v) => { setCloneSourceYearId(v); cloneForm.setValue("sourceTermId", ""); }}
-                queryKey={["src-year-clone"]} fetcher={yearFetcher}
-                getLabel={(y: any) => y.name} getValue={(y: any) => y.id} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Source Term</label>
-              <InfiniteSelect placeholder={cloneSourceYearId ? "Select term" : "Select source year first"}
-                value={cloneForm.watch("sourceTermId") ?? ""}
-                onChange={(v) => cloneForm.setValue("sourceTermId", v)}
-                queryKey={["src-terms-clone", cloneSourceYearId]} fetcher={sourceTermFetcher}
-                enabled={Boolean(cloneSourceYearId)}
-                getLabel={(t: any) => t.name} getValue={(t: any) => t.id} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Target Academic Year</label>
-              <InfiniteSelect placeholder="Select year" value={cloneForm.watch("targetAcademicYearId") ?? ""}
-                onChange={(v) => cloneForm.setValue("targetAcademicYearId", v)}
-                queryKey={["tgt-year-clone"]} fetcher={yearFetcher}
-                getLabel={(y: any) => y.name} getValue={(y: any) => y.id} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Target Term</label>
-              <InfiniteSelect placeholder="Select term" value={cloneForm.watch("targetTermId") ?? ""}
-                onChange={(v) => cloneForm.setValue("targetTermId", v)}
-                queryKey={["tgt-terms-clone", cloneForm.watch("targetAcademicYearId")]} fetcher={targetTermFetcher}
-                enabled={Boolean(cloneForm.watch("targetAcademicYearId"))}
-                getLabel={(t: any) => t.name} getValue={(t: any) => t.id} />
+                queryKey={["src-year-clone"]}
+                fetcher={yearFetcher}
+                getLabel={(y: any) => y.name}
+                getValue={(y: any) => y.id}
+              />
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => setCloneOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50">Cancel</button>
-              <button type="submit" disabled={cloneMutation.isPending} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
-                {cloneMutation.isPending && <Loader2 size={14} className="animate-spin" />} Clone Timetable
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Source Term</label>
+              <InfiniteSelect
+                placeholder={cloneSourceYearId ? "Select term" : "Select source year first"}
+                value={cloneForm.watch("sourceTermId") ?? ""}
+                onChange={(v) => cloneForm.setValue("sourceTermId", v)}
+                queryKey={["src-terms-clone", cloneSourceYearId]}
+                fetcher={sourceTermFetcher}
+                enabled={Boolean(cloneSourceYearId)}
+                getLabel={(t: any) => t.name}
+                getValue={(t: any) => t.id}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Target Academic Year</label>
+              <InfiniteSelect
+                placeholder="Select year"
+                value={cloneForm.watch("targetAcademicYearId") ?? ""}
+                onChange={(v) => { cloneForm.setValue("targetAcademicYearId", v); cloneForm.setValue("targetTermId", ""); }}
+                queryKey={["tgt-year-clone"]}
+                fetcher={yearFetcher}
+                getLabel={(y: any) => y.name}
+                getValue={(y: any) => y.id}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Target Term</label>
+              <InfiniteSelect
+                placeholder={cloneForm.watch("targetAcademicYearId") ? "Select term" : "Select target year first"}
+                value={cloneForm.watch("targetTermId") ?? ""}
+                onChange={(v) => cloneForm.setValue("targetTermId", v)}
+                queryKey={["tgt-terms-clone", cloneForm.watch("targetAcademicYearId")]}
+                fetcher={targetTermFetcher}
+                enabled={Boolean(cloneForm.watch("targetAcademicYearId"))}
+                getLabel={(t: any) => t.name}
+                getValue={(t: any) => t.id}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setCloneOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={cloneMutation.isPending}
+                className="px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {cloneMutation.isPending && <Loader2 size={14} className="animate-spin" />}
+                Clone Timetable
               </button>
             </div>
           </form>
