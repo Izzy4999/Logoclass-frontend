@@ -138,6 +138,9 @@ export const router = createBrowserRouter([
           { path: "/payments", element: L(() => import("@/pages/shared/PaymentsPage")) },
           { path: "/payments/callback", element: L(() => import("@/pages/shared/PaymentCallback")) },
 
+          // Timetable
+          { path: "/timetable", element: L(() => import("@/pages/shared/TimetablePage")) },
+
           // Admin-only
           {
             element: <PermissionRoute permissions={["VIEW_ACTION_LOGS"]} />,

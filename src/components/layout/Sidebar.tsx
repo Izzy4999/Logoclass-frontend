@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Shield, School, BookOpen, Video,
   ClipboardList, PenTool, FileText, Calendar, UserCheck, Megaphone,
   CreditCard, Wallet, ScrollText, Settings, MessageSquare, Bell,
-  User, Building2, ChevronLeft, ChevronRight, LogOut, BarChart2,
+  User, Building2, ChevronLeft, ChevronRight, LogOut, BarChart2, CalendarDays,
 } from "lucide-react";
 import { LogoMark, LogoFull } from "@/components/Logo";
 import type { Permission } from "@/types/role";
@@ -46,6 +46,7 @@ const ADMIN_ITEMS: NavItem[] = [
   { label: "Assignments", path: "/assignments", icon: ClipboardList, permission: "MANAGE_ASSIGNMENTS" },
   { label: "Quizzes", path: "/quizzes", icon: PenTool, permission: "MANAGE_QUIZZES", feature: "QUIZZES" },
   { label: "Exams", path: "/exams", icon: FileText, permission: "MANAGE_EXAMS" },
+  { label: "Timetable", path: "/timetable", icon: CalendarDays, permission: "MANAGE_TIMETABLE" },
   { label: "Attendance", path: "/attendance", icon: UserCheck, permission: "MARK_ATTENDANCE" },
   { label: "Announcements", path: "/announcements", icon: Megaphone, permission: "CREATE_ANNOUNCEMENT" },
   { label: "Fees", path: "/fees", icon: CreditCard, permission: "MANAGE_PAYMENTS", feature: "PAYMENTS" },
@@ -57,6 +58,7 @@ const ADMIN_ITEMS: NavItem[] = [
 
 const STUDENT_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, alwaysShow: true },
+  { label: "Timetable", path: "/timetable", icon: CalendarDays, alwaysShow: true },
   { label: "Lessons", path: "/lessons", icon: BookOpen, alwaysShow: true },
   { label: "Live Classes", path: "/live-classes", icon: Video, alwaysShow: true, feature: "LIVE_CLASSES" },
   { label: "Assignments", path: "/assignments", icon: ClipboardList, alwaysShow: true },
@@ -68,6 +70,7 @@ const STUDENT_ITEMS: NavItem[] = [
 
 const PARENT_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, alwaysShow: true },
+  { label: "Timetable", path: "/timetable", icon: CalendarDays, alwaysShow: true },
   { label: "Attendance", path: "/attendance", icon: UserCheck, alwaysShow: true },
   { label: "Grades", path: "/course-enrollments", icon: BookOpen, alwaysShow: true },
   { label: "Fees", path: "/fees", icon: CreditCard, alwaysShow: true, feature: "PAYMENTS" },
