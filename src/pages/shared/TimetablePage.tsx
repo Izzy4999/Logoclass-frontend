@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,6 +22,7 @@ import { timetableApi, type TimetableEntry, type DayOfWeek } from "@/api/timetab
 import { classesApi, gradeLevelsApi, academicYearsApi, subjectsApi } from "@/api/classes";
 import { usersApi } from "@/api/users";
 import { useAuth } from "@/hooks/useAuth";
+import { useCurrentAcademicYear } from "@/hooks/useCurrentAcademicYear";
 import { toast } from "@/lib/toast";
 import type { PaginationMeta } from "@/types/api";
 
@@ -115,6 +116,7 @@ export default function TimetablePage() {
   const calendarRef = useRef<InstanceType<typeof FullCalendar>>(null);
 
   const canManage = can("MANAGE_TIMETABLE");
+  const { currentYear } = useCurrentAcademicYear();
 
   const defaultViewMode: ViewMode =
     isStudent || isParent ? "class" : isTeacher ? "class" : "grade";
@@ -131,6 +133,13 @@ export default function TimetablePage() {
   const [selectedTeacherId, setSelectedTeacherId] = useState(
     isTeacher ? (user?.id ?? "") : ""
   );
+
+  // Auto-select current academic year on first load
+  useEffect(() => {
+    if (currentYear && !selectedAcademicYearId) {
+      setSelectedAcademicYearId(currentYear.id);
+    }
+  }, [currentYear]);
 
   // Modals
   const [createOpen, setCreateOpen] = useState(false);

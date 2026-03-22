@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Plus, Edit2, Trash2, Loader2, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
@@ -8,6 +8,7 @@ import Modal from "@/components/shared/Modal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import InfiniteSelect from "@/components/shared/InfiniteSelect";
 import { courseEnrollmentsApi, subjectsApi, academicYearsApi } from "@/api/classes";
+import { useCurrentAcademicYear } from "@/hooks/useCurrentAcademicYear";
 import { usersApi } from "@/api/users";
 import type { CourseEnrollment } from "@/types/class";
 import type { User } from "@/types/user";
@@ -43,6 +44,7 @@ const subjectsFetcher = ({ page, search }: { page: number; search: string }) =>
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function CourseEnrollments() {
   const qc = useQueryClient();
+  const { currentYear } = useCurrentAcademicYear();
 
   // table filters / pagination
   const [page, setPage]           = useState(1);
@@ -55,6 +57,13 @@ export default function CourseEnrollments() {
 
   // forms
   const [createForm, setCreateForm] = useState(INIT_CREATE);
+
+  // Auto-select current academic year in create form
+  useEffect(() => {
+    if (currentYear) {
+      setCreateForm(f => f.academicYearId ? f : { ...f, academicYearId: currentYear.id });
+    }
+  }, [currentYear]);
   const [editForm,   setEditForm]   = useState(INIT_EDIT);
   const [formErr,    setFormErr]    = useState("");
 

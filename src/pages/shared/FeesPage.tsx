@@ -12,6 +12,7 @@ import Modal from "@/components/shared/Modal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { paymentsApi } from "@/api/payments";
 import { gradeLevelsApi, academicYearsApi } from "@/api/classes";
+import { useCurrentAcademicYear } from "@/hooks/useCurrentAcademicYear";
 import { formatDate } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/lib/toast";
@@ -208,6 +209,13 @@ function FeeForm({
     setValue("termId", "");
   }, [academicYearId, setValue]);
 
+  // Auto-select current academic year
+  useEffect(() => {
+    if (currentYear && !academicYearId) {
+      setValue("academicYearId", currentYear.id);
+    }
+  }, [currentYear]);
+
   const doSubmit = (values: FeeFormValues) => {
     onSubmit({
       ...values,
@@ -298,6 +306,7 @@ export default function FeesPage() {
   const qc = useQueryClient();
   const { can } = useAuth();
   const canManage = can("MANAGE_PAYMENTS");
+  const { currentYear } = useCurrentAcademicYear();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Fee | null>(null);

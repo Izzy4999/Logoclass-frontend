@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,6 +10,7 @@ import Modal from "@/components/shared/Modal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import InfiniteSelect from "@/components/shared/InfiniteSelect";
 import { enrollmentsApi, gradeLevelsApi, classesApi, academicYearsApi } from "@/api/classes";
+import { useCurrentAcademicYear } from "@/hooks/useCurrentAcademicYear";
 import { usersApi } from "@/api/users";
 import type { StudentEnrollment } from "@/types/class";
 import type { User } from "@/types/user";
@@ -40,6 +41,7 @@ type EditEnrollmentForm = z.infer<typeof editSchema>;
 
 export default function Enrollments() {
   const qc = useQueryClient();
+  const { currentYear } = useCurrentAcademicYear();
   const [search, setSearch]     = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
   const [classFilter, setClassFilter] = useState("");
@@ -75,6 +77,14 @@ export default function Enrollments() {
   const { data: gradesData }  = useQuery({ queryKey: ["grade-levels-all"], queryFn: () => gradeLevelsApi.list({ limit: 100 }) });
   const { data: classesData } = useQuery({ queryKey: ["classes-all"], queryFn: () => classesApi.list({ limit: 100, gradeLevelId: gradeFilter || undefined }) });
   const { data: yearsData }   = useQuery({ queryKey: ["academic-years-all"], queryFn: () => academicYearsApi.list({ limit: 100 }) });
+
+  // Auto-select current academic year in filter and create form
+  useEffect(() => {
+    if (currentYear) {
+      if (!yearFilter) setYearFilter(currentYear.id);
+      setCreateValue("academicYearId", currentYear.id);
+    }
+  }, [currentYear]);
   const studentFetcher = ({ page, search }: { page: number; search: string }) =>
     usersApi.list({ page, limit: 100, search: search || undefined })
       .then(r => ({ data: r.data.data, meta: r.data.meta }));
