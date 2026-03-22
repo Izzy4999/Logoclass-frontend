@@ -12,6 +12,7 @@ import Modal from "@/components/shared/Modal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { paymentsApi } from "@/api/payments";
 import { gradeLevelsApi, academicYearsApi } from "@/api/classes";
+import { useCurrentAcademicYear } from "@/hooks/useCurrentAcademicYear";
 import { formatDate } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/lib/toast";
@@ -182,6 +183,7 @@ function FeeForm({
   });
 
   const academicYearId = watch("academicYearId");
+  const { currentYear } = useCurrentAcademicYear();
 
   const { data: gradesData } = useQuery({
     queryKey: ["grade-levels-all"],
@@ -207,6 +209,13 @@ function FeeForm({
   useEffect(() => {
     setValue("termId", "");
   }, [academicYearId, setValue]);
+
+  // Auto-select current academic year
+  useEffect(() => {
+    if (currentYear && !academicYearId) {
+      setValue("academicYearId", currentYear.id);
+    }
+  }, [currentYear]);
 
   const doSubmit = (values: FeeFormValues) => {
     onSubmit({
