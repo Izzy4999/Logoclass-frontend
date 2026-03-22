@@ -183,6 +183,7 @@ function FeeForm({
   });
 
   const academicYearId = watch("academicYearId");
+  const { currentYear } = useCurrentAcademicYear();
 
   const { data: gradesData } = useQuery({
     queryKey: ["grade-levels-all"],
@@ -306,7 +307,6 @@ export default function FeesPage() {
   const qc = useQueryClient();
   const { can } = useAuth();
   const canManage = can("MANAGE_PAYMENTS");
-  const { currentYear } = useCurrentAcademicYear();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Fee | null>(null);
