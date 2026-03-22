@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,10 +15,11 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import InfiniteSelect from "@/components/shared/InfiniteSelect";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { timetableApi, type TimetableEntry, type DayOfWeek } from "@/api/timetable";
-import { classesApi, gradeLevelsApi, academicYearsApi, subjectsApi } from "@/api/classes";
+import { classesApi, gradeLevelsApi, academicYearsApi, subjectsApi, enrollmentsApi } from "@/api/classes";
 import { usersApi } from "@/api/users";
 import { useAuth } from "@/hooks/useAuth";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
+import type { PaginationMeta } from "@/types/api";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,10 @@ function subjectColor(subjectId: string) {
   let hash = 0;
   for (let i = 0; i < subjectId.length; i++) hash = subjectId.charCodeAt(i) + ((hash << 5) - hash);
   return SUBJECT_COLORS[Math.abs(hash) % SUBJECT_COLORS.length];
+}
+
+function fakeMeta(length: number): PaginationMeta {
+  return { total: length, page: 1, limit: 100, totalPages: 1 };
 }
 
 // ── Schema ────────────────────────────────────────────────────────────────────
@@ -70,27 +75,49 @@ type ViewMode = "grade" | "class" | "teacher";
 export default function TimetablePage() {
   const qc = useQueryClient();
   const { user, can, isTeacher, isStudent, isParent } = useAuth();
-  const calendarRef = useRef<any>(null);
+  const calendarRef = useRef<InstanceType<typeof FullCalendar>>(null);
 
-  const canManage = can("MANAGE_TIMETABLE" as any);
-  const readOnly = isStudent || isParent;
+  const canManage = can("MANAGE_TIMETABLE");
 
-  // Filter state
-  const [viewMode, setViewMode] = useState<ViewMode>(isTeacher ? "teacher" : "class");
+  // Default view mode:
+  // - Admin: grade
+  // - Teacher: class (to browse any class) — can also switch to "teacher"
+  // - Student/Parent: class (read-only, auto-set or picker)
+  const defaultViewMode: ViewMode = isTeacher ? "class" : canManage ? "grade" : "class";
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode);
+
   const [selectedTermId, setSelectedTermId] = useState("");
   const [selectedAcademicYearId, setSelectedAcademicYearId] = useState("");
   const [selectedClassId, setSelectedClassId] = useState("");
   const [selectedGradeLevelId, setSelectedGradeLevelId] = useState("");
+  // Teachers always view their own schedule in "teacher" mode; admin can pick any teacher
   const [selectedTeacherId, setSelectedTeacherId] = useState(
     isTeacher ? (user?.id ?? "") : ""
   );
 
-  // Modal state
+  // Modal state (admin only)
   const [createOpen, setCreateOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TimetableEntry | null>(null);
-  const [prefill, setPrefill] = useState<{ dayOfWeek?: DayOfWeek; startTime?: string; endTime?: string } | null>(null);
   const [serverError, setServerError] = useState("");
+
+  // ── Student: auto-load their enrolled class ───────────────────────────────
+
+  const { data: enrollmentData } = useQuery({
+    queryKey: ["my-enrollment", user?.id, selectedAcademicYearId],
+    queryFn: () =>
+      enrollmentsApi.list({ studentId: user!.id, academicYearId: selectedAcademicYearId })
+        .then(r => r.data.data ?? []),
+    enabled: isStudent && Boolean(user?.id) && Boolean(selectedAcademicYearId),
+  });
+
+  // Auto-set classId from enrollment for students
+  useEffect(() => {
+    if (!isStudent || !enrollmentData) return;
+    const enrollment = enrollmentData[0];
+    const classId = (enrollment as any)?.classSectionId ?? (enrollment as any)?.classId ?? "";
+    if (classId) setSelectedClassId(classId);
+  }, [isStudent, enrollmentData]);
 
   // ── Queries ──────────────────────────────────────────────────────────────
 
@@ -119,11 +146,10 @@ export default function TimetablePage() {
 
   // ── Calendar events ──────────────────────────────────────────────────────
 
-  // We use a fixed "anchor" week: Mon 2000-01-03 to Sat 2000-01-08
   const calendarEvents = useMemo(() => {
     return entries.map((e) => {
       const dayNum = DAY_MAP[e.dayOfWeek];
-      const date = new Date(2000, 0, 3 + (dayNum - 1)); // 2000-01-03 is Monday
+      const date = new Date(2000, 0, 3 + (dayNum - 1));
       const dateStr = date.toISOString().split("T")[0];
       const color = subjectColor(e.subjectId);
       return {
@@ -138,11 +164,9 @@ export default function TimetablePage() {
     });
   }, [entries]);
 
-  // ── Mutations ────────────────────────────────────────────────────────────
+  // ── Mutations (admin only) ────────────────────────────────────────────────
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["timetable"] });
-  };
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["timetable"] });
 
   const createMutation = useMutation({
     mutationFn: (data: EntryFormData) => {
@@ -194,7 +218,6 @@ export default function TimetablePage() {
     if (viewMode === "class" && selectedClassId) setValue("classId", selectedClassId);
     if (viewMode === "grade" && selectedGradeLevelId) setValue("gradeLevelId", selectedGradeLevelId);
     setServerError("");
-    setPrefill(slot ?? null);
     setCreateOpen(true);
   }
 
@@ -203,13 +226,10 @@ export default function TimetablePage() {
   function handleDateSelect(arg: DateSelectArg) {
     if (!canManage) return;
     const d = arg.start;
-    const day = d.getDay(); // 0=Sun,1=Mon...
+    const day = d.getDay();
     const dayKeys: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
     const dayOfWeek = dayKeys[day - 1] as DayOfWeek;
-    const startTime = d.toTimeString().slice(0, 5);
-    const end = arg.end;
-    const endTime = end.toTimeString().slice(0, 5);
-    openCreate({ dayOfWeek, startTime, endTime });
+    openCreate({ dayOfWeek, startTime: d.toTimeString().slice(0, 5), endTime: arg.end.toTimeString().slice(0, 5) });
   }
 
   function handleEventClick(arg: EventClickArg) {
@@ -217,14 +237,55 @@ export default function TimetablePage() {
     if (canManage) setDeleteTarget(entry);
   }
 
+  // ── Fetchers for InfiniteSelect ──────────────────────────────────────────
+
+  const yearFetcher = ({ page, search }: { page: number; search: string }) =>
+    academicYearsApi.list({ page, limit: 50, search: search || undefined })
+      .then(r => ({ data: r.data.data ?? [], meta: r.data.meta ?? fakeMeta(0) }));
+
+  const termFetcher = (_: { page: number; search: string }) =>
+    academicYearsApi.listTerms(selectedAcademicYearId)
+      .then(r => { const d = r.data.data ?? []; return { data: d, meta: fakeMeta(d.length) }; });
+
+  const gradeFetcher = ({ page, search }: { page: number; search: string }) =>
+    gradeLevelsApi.list({ page, limit: 50, search: search || undefined })
+      .then(r => ({ data: r.data.data ?? [], meta: r.data.meta ?? fakeMeta(0) }));
+
+  const classFetcher = ({ page, search }: { page: number; search: string }) =>
+    classesApi.list({ page, limit: 50, search: search || undefined })
+      .then(r => ({ data: r.data.data ?? [], meta: r.data.meta ?? fakeMeta(0) }));
+
+  const teacherFetcher = ({ page, search }: { page: number; search: string }) =>
+    usersApi.list({ page, limit: 50, search: search || undefined })
+      .then(r => ({ data: r.data.data ?? [], meta: r.data.meta ?? fakeMeta(0) }));
+
+  const subjectFetcher = ({ page, search }: { page: number; search: string }) =>
+    subjectsApi.list({ page, limit: 50, search: search || undefined })
+      .then(r => ({ data: r.data.data ?? [], meta: r.data.meta ?? fakeMeta(0) }));
+
+  const targetTermFetcher = (_: { page: number; search: string }) =>
+    academicYearsApi.listTerms(cloneForm.watch("targetAcademicYearId"))
+      .then(r => { const d = r.data.data ?? []; return { data: d, meta: fakeMeta(d.length) }; });
+
+  // ── What view modes are available by role ────────────────────────────────
+
+  // Admin: grade | class | teacher
+  // Teacher: class | teacher (own schedule locked)
+  // Student/Parent: class only (no switcher)
+  const availableViewModes: ViewMode[] = canManage
+    ? ["grade", "class", "teacher"]
+    : isTeacher
+    ? ["class", "teacher"]
+    : [];
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Timetable"
-        subtitle="Weekly schedule for classes and grade levels"
-        actions={
+        description="Weekly schedule for classes and grade levels"
+        action={
           canManage ? (
             <div className="flex gap-2">
               <button
@@ -246,12 +307,12 @@ export default function TimetablePage() {
 
       {/* ── Filters ── */}
       <div className="card p-4 flex flex-wrap gap-4 items-end">
-        {/* View mode (admin only) */}
-        {canManage && (
+        {/* View mode switcher (admin and teacher) */}
+        {availableViewModes.length > 1 && (
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-slate-500">View by</label>
             <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-              {(["grade", "class", "teacher"] as ViewMode[]).map((m) => (
+              {availableViewModes.map((m) => (
                 <button
                   key={m}
                   onClick={() => setViewMode(m)}
@@ -259,7 +320,7 @@ export default function TimetablePage() {
                     viewMode === m ? "bg-primary-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  {m}
+                  {m === "teacher" && isTeacher ? "My Schedule" : m}
                 </button>
               ))}
             </div>
@@ -273,13 +334,10 @@ export default function TimetablePage() {
             placeholder="Select year"
             value={selectedAcademicYearId}
             onChange={(v) => { setSelectedAcademicYearId(v); setSelectedTermId(""); }}
-            fetchFn={(p) => academicYearsApi.list(p).then((r) => ({
-              items: r.data.data?.items ?? [],
-              total: r.data.data?.total ?? 0,
-            }))}
+            queryKey={["academic-years-timetable"]}
+            fetcher={yearFetcher}
             getLabel={(y: any) => y.name}
             getValue={(y: any) => y.id}
-            queryKey="academic-years-select"
           />
         </div>
 
@@ -291,18 +349,15 @@ export default function TimetablePage() {
               placeholder="Select term"
               value={selectedTermId}
               onChange={setSelectedTermId}
-              fetchFn={() => academicYearsApi.listTerms(selectedAcademicYearId).then((r) => ({
-                items: r.data.data ?? [],
-                total: (r.data.data ?? []).length,
-              }))}
+              queryKey={["terms-timetable", selectedAcademicYearId]}
+              fetcher={termFetcher}
               getLabel={(t: any) => t.name}
               getValue={(t: any) => t.id}
-              queryKey={`terms-select-${selectedAcademicYearId}`}
             />
           </div>
         )}
 
-        {/* Grade / Class / Teacher filter */}
+        {/* Grade picker (admin only in grade mode) */}
         {viewMode === "grade" && (
           <div className="flex flex-col gap-1 w-48">
             <label className="text-xs font-medium text-slate-500">Grade Level</label>
@@ -310,48 +365,49 @@ export default function TimetablePage() {
               placeholder="Select grade"
               value={selectedGradeLevelId}
               onChange={setSelectedGradeLevelId}
-              fetchFn={(p) => gradeLevelsApi.list(p).then((r) => ({
-                items: r.data.data?.items ?? [],
-                total: r.data.data?.total ?? 0,
-              }))}
+              queryKey={["grades-timetable"]}
+              fetcher={gradeFetcher}
               getLabel={(g: any) => g.name}
               getValue={(g: any) => g.id}
-              queryKey="grade-levels-select"
             />
           </div>
         )}
-        {viewMode === "class" && (
+
+        {/* Class picker (admin, teacher, parent; student = auto-set from enrollment) */}
+        {viewMode === "class" && !isStudent && (
           <div className="flex flex-col gap-1 w-48">
             <label className="text-xs font-medium text-slate-500">Class</label>
             <InfiniteSelect
               placeholder="Select class"
               value={selectedClassId}
               onChange={setSelectedClassId}
-              fetchFn={(p) => classesApi.list(p).then((r) => ({
-                items: r.data.data?.items ?? [],
-                total: r.data.data?.total ?? 0,
-              }))}
+              queryKey={["classes-timetable"]}
+              fetcher={classFetcher}
               getLabel={(c: any) => c.name}
               getValue={(c: any) => c.id}
-              queryKey="classes-select"
             />
           </div>
         )}
-        {viewMode === "teacher" && !isTeacher && (
+
+        {/* Teacher picker — admin picks any, teacher is locked to themselves */}
+        {viewMode === "teacher" && (
           <div className="flex flex-col gap-1 w-48">
             <label className="text-xs font-medium text-slate-500">Teacher</label>
-            <InfiniteSelect
-              placeholder="Select teacher"
-              value={selectedTeacherId}
-              onChange={setSelectedTeacherId}
-              fetchFn={(p) => usersApi.list({ ...p, role: "Teacher" }).then((r) => ({
-                items: r.data.data?.items ?? [],
-                total: r.data.data?.total ?? 0,
-              }))}
-              getLabel={(u: any) => `${u.firstName} ${u.lastName}`}
-              getValue={(u: any) => u.id}
-              queryKey="teachers-select"
-            />
+            {isTeacher ? (
+              <div className="px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm text-slate-600">
+                {user?.firstName} {user?.lastName}
+              </div>
+            ) : (
+              <InfiniteSelect
+                placeholder="Select teacher"
+                value={selectedTeacherId}
+                onChange={setSelectedTeacherId}
+                queryKey={["teachers-timetable"]}
+                fetcher={teacherFetcher}
+                getLabel={(u: any) => `${u.firstName} ${u.lastName}`}
+                getValue={(u: any) => u.id}
+              />
+            )}
           </div>
         )}
       </div>
@@ -373,7 +429,7 @@ export default function TimetablePage() {
             headerToolbar={false}
             initialDate="2000-01-03"
             validRange={{ start: "2000-01-03", end: "2000-01-09" }}
-            hiddenDays={[0]} // hide Sunday
+            hiddenDays={[0]}
             allDaySlot={false}
             selectable={canManage}
             selectMirror
@@ -403,191 +459,197 @@ export default function TimetablePage() {
         )}
       </div>
 
-      {/* ── Create Modal ── */}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Timetable Slot">
-        <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="space-y-4">
-          {serverError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>}
+      {/* ── Create Modal (admin only) ── */}
+      {canManage && (
+        <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Timetable Slot">
+          <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="space-y-4">
+            {serverError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>}
 
-          {/* Scope type */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Applies to</label>
-            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-              <button type="button" onClick={() => setValue("scopeType", "grade")}
-                className={`flex-1 py-2 text-sm font-medium transition-colors ${scopeType === "grade" ? "bg-primary-600 text-white" : "bg-white text-slate-600"}`}>
-                Grade (all classes)
-              </button>
-              <button type="button" onClick={() => setValue("scopeType", "class")}
-                className={`flex-1 py-2 text-sm font-medium transition-colors ${scopeType === "class" ? "bg-primary-600 text-white" : "bg-white text-slate-600"}`}>
-                Specific Class
-              </button>
-            </div>
-          </div>
-
-          {/* Grade or Class picker */}
-          {scopeType === "grade" ? (
+            {/* Scope type */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Grade Level</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Applies to</label>
+              <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                <button type="button" onClick={() => setValue("scopeType", "grade")}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${scopeType === "grade" ? "bg-primary-600 text-white" : "bg-white text-slate-600"}`}>
+                  Grade (all classes)
+                </button>
+                <button type="button" onClick={() => setValue("scopeType", "class")}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${scopeType === "class" ? "bg-primary-600 text-white" : "bg-white text-slate-600"}`}>
+                  Specific Class
+                </button>
+              </div>
+            </div>
+
+            {/* Grade or Class picker */}
+            {scopeType === "grade" ? (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Grade Level</label>
+                <InfiniteSelect
+                  placeholder="Select grade"
+                  value={watch("gradeLevelId") ?? ""}
+                  onChange={(v) => setValue("gradeLevelId", v)}
+                  queryKey={["grade-modal-tt"]}
+                  fetcher={gradeFetcher}
+                  getLabel={(g: any) => g.name}
+                  getValue={(g: any) => g.id}
+                />
+                {errors.gradeLevelId && <p className="text-xs text-red-500 mt-1">{errors.gradeLevelId.message}</p>}
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Class</label>
+                <InfiniteSelect
+                  placeholder="Select class"
+                  value={watch("classId") ?? ""}
+                  onChange={(v) => setValue("classId", v)}
+                  queryKey={["class-modal-tt"]}
+                  fetcher={classFetcher}
+                  getLabel={(c: any) => c.name}
+                  getValue={(c: any) => c.id}
+                />
+                {errors.classId && <p className="text-xs text-red-500 mt-1">{errors.classId.message}</p>}
+              </div>
+            )}
+
+            {/* Subject */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Subject</label>
               <InfiniteSelect
-                placeholder="Select grade"
-                value={watch("gradeLevelId") ?? ""}
-                onChange={(v) => setValue("gradeLevelId", v)}
-                fetchFn={(p) => gradeLevelsApi.list(p).then((r) => ({ items: r.data.data?.items ?? [], total: r.data.data?.total ?? 0 }))}
-                getLabel={(g: any) => g.name}
-                getValue={(g: any) => g.id}
-                queryKey="grade-modal"
+                placeholder="Select subject"
+                value={watch("subjectId") ?? ""}
+                onChange={(v) => setValue("subjectId", v)}
+                queryKey={["subjects-modal-tt"]}
+                fetcher={subjectFetcher}
+                getLabel={(s: any) => s.name}
+                getValue={(s: any) => s.id}
               />
-              {errors.gradeLevelId && <p className="text-xs text-red-500 mt-1">{errors.gradeLevelId.message}</p>}
+              {errors.subjectId && <p className="text-xs text-red-500 mt-1">{errors.subjectId.message}</p>}
             </div>
-          ) : (
+
+            {/* Teacher */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Class</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Teacher</label>
               <InfiniteSelect
-                placeholder="Select class"
-                value={watch("classId") ?? ""}
-                onChange={(v) => setValue("classId", v)}
-                fetchFn={(p) => classesApi.list(p).then((r) => ({ items: r.data.data?.items ?? [], total: r.data.data?.total ?? 0 }))}
-                getLabel={(c: any) => c.name}
-                getValue={(c: any) => c.id}
-                queryKey="class-modal"
+                placeholder="Select teacher"
+                value={watch("teacherId") ?? ""}
+                onChange={(v) => setValue("teacherId", v)}
+                queryKey={["teachers-modal-tt"]}
+                fetcher={teacherFetcher}
+                getLabel={(u: any) => `${u.firstName} ${u.lastName}`}
+                getValue={(u: any) => u.id}
               />
-              {errors.classId && <p className="text-xs text-red-500 mt-1">{errors.classId.message}</p>}
+              {errors.teacherId && <p className="text-xs text-red-500 mt-1">{errors.teacherId.message}</p>}
             </div>
-          )}
 
-          {/* Subject */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Subject</label>
-            <InfiniteSelect
-              placeholder="Select subject"
-              value={watch("subjectId") ?? ""}
-              onChange={(v) => setValue("subjectId", v)}
-              fetchFn={(p) => subjectsApi.list(p).then((r) => ({ items: r.data.data?.items ?? [], total: r.data.data?.total ?? 0 }))}
-              getLabel={(s: any) => s.name}
-              getValue={(s: any) => s.id}
-              queryKey="subjects-modal"
-            />
-            {errors.subjectId && <p className="text-xs text-red-500 mt-1">{errors.subjectId.message}</p>}
-          </div>
-
-          {/* Teacher */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Teacher</label>
-            <InfiniteSelect
-              placeholder="Select teacher"
-              value={watch("teacherId") ?? ""}
-              onChange={(v) => setValue("teacherId", v)}
-              fetchFn={(p) => usersApi.list(p).then((r) => ({ items: r.data.data?.items ?? [], total: r.data.data?.total ?? 0 }))}
-              getLabel={(u: any) => `${u.firstName} ${u.lastName}`}
-              getValue={(u: any) => u.id}
-              queryKey="teachers-modal"
-            />
-            {errors.teacherId && <p className="text-xs text-red-500 mt-1">{errors.teacherId.message}</p>}
-          </div>
-
-          {/* Day */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Day</label>
-            <select {...register("dayOfWeek")} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
-              {(["MON", "TUE", "WED", "THU", "FRI", "SAT"] as DayOfWeek[]).map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Time */}
-          <div className="grid grid-cols-2 gap-3">
+            {/* Day */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Start Time</label>
-              <input type="time" {...register("startTime")} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-              {errors.startTime && <p className="text-xs text-red-500 mt-1">{errors.startTime.message}</p>}
+              <label className="block text-sm font-medium text-slate-700 mb-1">Day</label>
+              <select {...register("dayOfWeek")} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+                {(["MON", "TUE", "WED", "THU", "FRI", "SAT"] as DayOfWeek[]).map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
             </div>
+
+            {/* Time */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Start Time</label>
+                <input type="time" {...register("startTime")} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+                {errors.startTime && <p className="text-xs text-red-500 mt-1">{errors.startTime.message}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">End Time</label>
+                <input type="time" {...register("endTime")} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+                {errors.endTime && <p className="text-xs text-red-500 mt-1">{errors.endTime.message}</p>}
+              </div>
+            </div>
+
+            {/* Period label */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">End Time</label>
-              <input type="time" {...register("endTime")} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-              {errors.endTime && <p className="text-xs text-red-500 mt-1">{errors.endTime.message}</p>}
+              <label className="block text-sm font-medium text-slate-700 mb-1">Period Label <span className="text-slate-400">(optional)</span></label>
+              <input {...register("periodLabel")} placeholder="e.g. Period 1" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
             </div>
-          </div>
 
-          {/* Period label */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Period Label <span className="text-slate-400">(optional)</span></label>
-            <input {...register("periodLabel")} placeholder="e.g. Period 1" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-          </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => setCreateOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50">Cancel</button>
+              <button type="submit" disabled={createMutation.isPending} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
+                {createMutation.isPending && <Loader2 size={14} className="animate-spin" />} Add Slot
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setCreateOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50">Cancel</button>
-            <button type="submit" disabled={createMutation.isPending} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
-              {createMutation.isPending && <Loader2 size={14} className="animate-spin" />} Add Slot
-            </button>
-          </div>
-        </form>
-      </Modal>
+      {/* ── Clone Modal (admin only) ── */}
+      {canManage && (
+        <Modal open={cloneOpen} onClose={() => setCloneOpen(false)} title="Reuse Timetable">
+          <form onSubmit={cloneForm.handleSubmit((d) => cloneMutation.mutate(d))} className="space-y-4">
+            {serverError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>}
+            <p className="text-sm text-slate-500">Copy all timetable entries from one term into another term or academic year.</p>
 
-      {/* ── Clone Modal ── */}
-      <Modal open={cloneOpen} onClose={() => setCloneOpen(false)} title="Reuse Timetable">
-        <form onSubmit={cloneForm.handleSubmit((d) => cloneMutation.mutate(d))} className="space-y-4">
-          {serverError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>}
-          <p className="text-sm text-slate-500">Copy all timetable entries from one term into another term or academic year. Useful for reusing the same schedule in a new session.</p>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Source Term</label>
+              <InfiniteSelect
+                placeholder="Select source term"
+                value={cloneForm.watch("sourceTermId") ?? ""}
+                onChange={(v) => cloneForm.setValue("sourceTermId", v)}
+                queryKey={["source-terms-clone", selectedAcademicYearId]}
+                fetcher={termFetcher}
+                getLabel={(t: any) => t.name}
+                getValue={(t: any) => t.id}
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Source Term</label>
-            <InfiniteSelect
-              placeholder="Select source term"
-              value={cloneForm.watch("sourceTermId") ?? ""}
-              onChange={(v) => cloneForm.setValue("sourceTermId", v)}
-              fetchFn={() => academicYearsApi.listTerms(selectedAcademicYearId).then((r) => ({ items: r.data.data ?? [], total: (r.data.data ?? []).length }))}
-              getLabel={(t: any) => t.name}
-              getValue={(t: any) => t.id}
-              queryKey={`source-terms-${selectedAcademicYearId}`}
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Target Academic Year</label>
+              <InfiniteSelect
+                placeholder="Select target year"
+                value={cloneForm.watch("targetAcademicYearId") ?? ""}
+                onChange={(v) => cloneForm.setValue("targetAcademicYearId", v)}
+                queryKey={["target-year-clone-tt"]}
+                fetcher={yearFetcher}
+                getLabel={(y: any) => y.name}
+                getValue={(y: any) => y.id}
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Target Academic Year</label>
-            <InfiniteSelect
-              placeholder="Select target year"
-              value={cloneForm.watch("targetAcademicYearId") ?? ""}
-              onChange={(v) => cloneForm.setValue("targetAcademicYearId", v)}
-              fetchFn={(p) => academicYearsApi.list(p).then((r) => ({ items: r.data.data?.items ?? [], total: r.data.data?.total ?? 0 }))}
-              getLabel={(y: any) => y.name}
-              getValue={(y: any) => y.id}
-              queryKey="target-year-clone"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Target Term</label>
+              <InfiniteSelect
+                placeholder="Select target term"
+                value={cloneForm.watch("targetTermId") ?? ""}
+                onChange={(v) => cloneForm.setValue("targetTermId", v)}
+                queryKey={["target-terms-clone", cloneForm.watch("targetAcademicYearId")]}
+                fetcher={targetTermFetcher}
+                getLabel={(t: any) => t.name}
+                getValue={(t: any) => t.id}
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Target Term</label>
-            <InfiniteSelect
-              placeholder="Select target term"
-              value={cloneForm.watch("targetTermId") ?? ""}
-              onChange={(v) => cloneForm.setValue("targetTermId", v)}
-              fetchFn={() => academicYearsApi.listTerms(cloneForm.watch("targetAcademicYearId")).then((r) => ({ items: r.data.data ?? [], total: (r.data.data ?? []).length }))}
-              getLabel={(t: any) => t.name}
-              getValue={(t: any) => t.id}
-              queryKey={`target-terms-${cloneForm.watch("targetAcademicYearId")}`}
-            />
-          </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => setCloneOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50">Cancel</button>
+              <button type="submit" disabled={cloneMutation.isPending} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
+                {cloneMutation.isPending && <Loader2 size={14} className="animate-spin" />} Clone Timetable
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setCloneOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50">Cancel</button>
-            <button type="submit" disabled={cloneMutation.isPending} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
-              {cloneMutation.isPending && <Loader2 size={14} className="animate-spin" />} Clone Timetable
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* ── Delete Confirm ── */}
-      <ConfirmDialog
-        open={Boolean(deleteTarget)}
-        title="Remove Slot"
-        description={`Remove ${deleteTarget?.subject.name} on ${deleteTarget?.dayOfWeek} at ${deleteTarget?.startTime}?`}
-        confirmLabel="Remove"
-        variant="danger"
-        loading={deleteMutation.isPending}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-        onCancel={() => setDeleteTarget(null)}
-      />
+      {/* ── Delete Confirm (admin only) ── */}
+      {canManage && (
+        <ConfirmDialog
+          open={Boolean(deleteTarget)}
+          onClose={() => setDeleteTarget(null)}
+          title="Remove Slot"
+          message={`Remove ${deleteTarget?.subject.name} on ${deleteTarget?.dayOfWeek} at ${deleteTarget?.startTime}?`}
+          confirmLabel="Remove"
+          variant="danger"
+          loading={deleteMutation.isPending}
+          onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        />
+      )}
     </div>
   );
 }

@@ -8,11 +8,16 @@ import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { liveClassesApi } from "@/api/live-classes";
 import { formatDateTime } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 import type { LiveClass } from "@/types/notification";
 
 export default function LiveClassesPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { can, isStudent, isParent } = useAuth();
+  const canManage = can("MANAGE_LIVE_CLASSES");
+  const readOnly = isStudent || isParent;
+
   const [deleteTarget, setDeleteTarget] = useState<LiveClass | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -38,11 +43,13 @@ export default function LiveClassesPage() {
     <div className="p-6">
       <PageHeader
         title="Live Classes"
-        description="Schedule and manage live class sessions"
+        description={canManage ? "Schedule and manage live class sessions" : "Join scheduled live class sessions"}
         action={
-          <Link to="new" className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90">
-            + Schedule Class
-          </Link>
+          canManage ? (
+            <Link to="new" className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90">
+              + Schedule Class
+            </Link>
+          ) : undefined
         }
       />
 
@@ -78,15 +85,15 @@ export default function LiveClassesPage() {
                     <div className="flex items-center gap-1">
                       {(cls.status === "SCHEDULED" || cls.status === "LIVE") && (
                         <Link to={`${cls.id}/room`} className="inline-flex items-center px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 mr-1">
-                          Join
+                          {cls.status === "LIVE" ? "Join Now" : "Join"}
                         </Link>
                       )}
-                      {cls.status === "SCHEDULED" && (
+                      {canManage && cls.status === "SCHEDULED" && (
                         <button onClick={() => navigate(`${cls.id}/edit`)} className="p-1 rounded text-muted-foreground hover:bg-slate-100" title="Edit">
                           <Edit2 className="h-3.5 w-3.5" />
                         </button>
                       )}
-                      {cls.status === "SCHEDULED" && (
+                      {canManage && cls.status === "SCHEDULED" && (
                         <button onClick={() => setDeleteTarget(cls)} className="p-1 rounded text-red-500 hover:bg-red-50" title="Delete">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
