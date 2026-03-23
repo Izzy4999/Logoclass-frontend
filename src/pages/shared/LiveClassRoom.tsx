@@ -232,24 +232,28 @@ export default function LiveClassRoom() {
 
               <h2 className="text-xl font-bold text-foreground mb-1">Room is Live</h2>
               <p className="text-sm text-muted-foreground mb-6">
-                Room: <span className="font-mono font-semibold text-foreground">{joinInfo.roomName}</span>
+                {joinInfo.token
+                  ? <>Room: <span className="font-mono font-semibold text-foreground">{joinInfo.roomName}</span></>
+                  : "Click below to join the external meeting"}
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3">
-                {/* In-app join (requires VITE_LIVEKIT_URL) */}
-                <motion.button
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => setJoined(true)}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 text-white text-sm font-semibold rounded-xl shadow-sm"
-                >
-                  <Video className="h-4 w-4" /> Join In-App
-                </motion.button>
+                {/* In-app — only when we have a LiveKit token + server URL */}
+                {joinInfo.token && LIVEKIT_URL && (
+                  <motion.button
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => setJoined(true)}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 text-white text-sm font-semibold rounded-xl shadow-sm"
+                  >
+                    <Video className="h-4 w-4" /> Join In-App
+                  </motion.button>
+                )}
 
-                {/* External fallback */}
-                {joinInfo.url && (
+                {/* External — only when joinUrl is set (Zoom / Meet / etc.) */}
+                {joinInfo.joinUrl && (
                   <motion.a
-                    href={joinInfo.url}
+                    href={joinInfo.joinUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     whileHover={{ scale: 1.04 }}
@@ -260,12 +264,6 @@ export default function LiveClassRoom() {
                   </motion.a>
                 )}
               </div>
-
-              {!LIVEKIT_URL && (
-                <p className="text-xs text-muted-foreground mt-5 bg-amber-50 border border-amber-100 px-3 py-2 rounded-lg">
-                  <strong>Note:</strong> In-app video requires <code>VITE_LIVEKIT_URL</code> to be set. Use "Open in Browser" as a fallback.
-                </p>
-              )}
             </div>
           ) : (
             <div className="flex flex-col items-center text-center py-10 px-4">

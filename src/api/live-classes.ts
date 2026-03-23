@@ -25,7 +25,7 @@ export const liveClassesApi = {
     apiClient.patch<ApiResponse<LiveClass>>(`/live-classes/${id}/end`),
 
   join: (id: string) =>
-    apiClient.post<ApiResponse<{ token: string; url: string; roomName: string }>>(`/live-classes/${id}/join`),
+    apiClient.post<ApiResponse<{ token: string | null; url: string | null; roomName: string; joinUrl: string | null }>>(`/live-classes/${id}/join`),
 
   getAttendance: (id: string) =>
     apiClient.get<ApiResponse<LiveClass["attendance"]>>(`/live-classes/${id}/attendance`),
