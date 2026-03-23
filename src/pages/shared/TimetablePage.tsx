@@ -381,7 +381,7 @@ export default function TimetablePage() {
 
               <button
                 onClick={openCreate}
-                className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-brand-900"
               >
                 <Plus size={16} /> Add Slot
               </button>
@@ -542,7 +542,7 @@ export default function TimetablePage() {
               {canManage && (
                 <button
                   onClick={openCreate}
-                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
+                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-brand-900"
                 >
                   <Plus size={16} /> Add Slot
                 </button>
@@ -775,7 +775,7 @@ export default function TimetablePage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Day</label>
                 <select
                   {...register("dayOfWeek")}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   {(["MON", "TUE", "WED", "THU", "FRI", "SAT"] as DayOfWeek[]).map((d) => (
                     <option key={d} value={d}>{DAY_LABELS[d]}</option>
@@ -787,7 +787,7 @@ export default function TimetablePage() {
                 <input
                   type="time"
                   {...register("startTime")}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 {errors.startTime && <p className="text-xs text-red-500 mt-1">{errors.startTime.message}</p>}
               </div>
@@ -796,7 +796,7 @@ export default function TimetablePage() {
                 <input
                   type="time"
                   {...register("endTime")}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 {errors.endTime && <p className="text-xs text-red-500 mt-1">{errors.endTime.message}</p>}
               </div>
@@ -810,7 +810,7 @@ export default function TimetablePage() {
               <input
                 {...register("periodLabel")}
                 placeholder="e.g. Period 1"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
@@ -834,7 +834,7 @@ export default function TimetablePage() {
             <button
               type="submit"
               disabled={createMutation.isPending}
-              className="px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+              className="px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-brand-900 disabled:opacity-50 flex items-center gap-2"
             >
               {createMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
               Add Slot
@@ -916,7 +916,7 @@ export default function TimetablePage() {
               <button
                 type="submit"
                 disabled={cloneMutation.isPending}
-                className="px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-brand-900 disabled:opacity-50 flex items-center gap-2"
               >
                 {cloneMutation.isPending && <Loader2 size={14} className="animate-spin" />}
                 Clone Timetable
