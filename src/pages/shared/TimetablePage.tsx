@@ -648,7 +648,8 @@ export default function TimetablePage() {
       {/* ── Create Slot Modal (admin only) ── */}
       {canManage && (
         <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Timetable Slot">
-          <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+          <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="flex flex-col">
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
             {serverError && (
               <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>
             )}
@@ -820,24 +821,25 @@ export default function TimetablePage() {
                 Live preview shown on calendar in green
               </div>
             )}
+          </div>
 
-            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setCreateOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={createMutation.isPending}
-                className="px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                {createMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                Add Slot
-              </button>
-            </div>
+          <div className="flex justify-end gap-3 pt-3 mt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setCreateOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {createMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              Add Slot
+            </button>
+          </div>
           </form>
         </Modal>
       )}
