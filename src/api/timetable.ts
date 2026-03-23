@@ -3,6 +3,15 @@ import type { ApiResponse } from "@/types/api";
 
 export type DayOfWeek = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT";
 
+export interface TimetableLiveClass {
+  id: string;
+  title: string;
+  scheduledAt: string;
+  status: "SCHEDULED" | "LIVE" | "ENDED" | "CANCELLED";
+  joinUrl: string | null;
+  roomName: string | null;
+}
+
 export interface TimetableEntry {
   id: string;
   tenantId: string;
@@ -20,6 +29,7 @@ export interface TimetableEntry {
   teacher: { id: string; firstName: string; lastName: string };
   gradeLevel: { id: string; name: string } | null;
   class: { id: string; name: string } | null;
+  liveClasses: TimetableLiveClass[];
 }
 
 export interface CreateTimetableDto {

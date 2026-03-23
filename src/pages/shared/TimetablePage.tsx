@@ -11,13 +11,14 @@ import interactionPlugin from "@fullcalendar/interaction";
 import type { EventClickArg } from "@fullcalendar/core";
 import {
   Plus, Copy, Trash2, Loader2, CalendarDays,
-  ChevronLeft, ChevronRight, LayoutGrid, List, Clock,
+  ChevronLeft, ChevronRight, Video, ExternalLink, X,
 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import Modal from "@/components/shared/Modal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import InfiniteSelect from "@/components/shared/InfiniteSelect";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import { liveClassesApi } from "@/api/live-classes";
 import { timetableApi, type TimetableEntry, type DayOfWeek } from "@/api/timetable";
 import { classesApi, gradeLevelsApi, academicYearsApi, subjectsApi } from "@/api/classes";
 import { usersApi } from "@/api/users";
@@ -146,6 +147,11 @@ export default function TimetablePage() {
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloneSourceYearId, setCloneSourceYearId] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<TimetableEntry | null>(null);
+  const [detailEntry, setDetailEntry] = useState<TimetableEntry | null>(null);
+  const [scheduleMode, setScheduleMode] = useState<"livekit" | "external" | null>(null);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [externalLink, setExternalLink] = useState("");
+  const [scheduleDuration, setScheduleDuration] = useState(45);
   const [serverError, setServerError] = useState("");
 
   // Subject/teacher name cache for draft preview
@@ -252,6 +258,18 @@ export default function TimetablePage() {
     onSuccess: () => { toast.success("Slot removed"); setDeleteTarget(null); invalidate(); },
   });
 
+  const scheduleLiveClassMutation = useMutation({
+    mutationFn: (dto: Parameters<typeof liveClassesApi.create>[0]) => liveClassesApi.create(dto),
+    onSuccess: () => {
+      toast.success("Live class scheduled");
+      setScheduleMode(null);
+      setScheduleDate("");
+      setExternalLink("");
+      invalidate();
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message ?? "Failed to schedule"),
+  });
+
   const cloneForm = useForm<CloneFormData>({ resolver: zodResolver(cloneSchema) });
 
   const cloneMutation = useMutation({
@@ -340,14 +358,18 @@ export default function TimetablePage() {
         ]
       : [];
 
-  function openCreate() {
+  const FC_DAY_MAP: Record<number, DayOfWeek> = { 1: "MON", 2: "TUE", 3: "WED", 4: "THU", 5: "FRI", 6: "SAT" };
+
+  function openCreate(prefill?: { dayOfWeek?: DayOfWeek; startTime?: string; endTime?: string }) {
     reset({
       scopeType:      viewMode === "class" ? "class" : "grade",
-      dayOfWeek:      "MON",
+      dayOfWeek:      prefill?.dayOfWeek ?? "MON",
+      startTime:      prefill?.startTime ?? "",
+      endTime:        prefill?.endTime   ?? "",
       termId:         selectedTermId,
       academicYearId: selectedAcademicYearId,
-      classId:        viewMode === "class" ? selectedClassId       : undefined,
-      gradeLevelId:   viewMode === "grade" ? selectedGradeLevelId  : undefined,
+      classId:        viewMode === "class" ? selectedClassId      : undefined,
+      gradeLevelId:   viewMode === "grade" ? selectedGradeLevelId : undefined,
     });
     setServerError("");
     setCreateOpen(true);
@@ -376,8 +398,8 @@ export default function TimetablePage() {
               </button>
 
               <button
-                onClick={openCreate}
-                className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
+                onClick={() => openCreate()}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-brand-900"
               >
                 <Plus size={16} /> Add Slot
               </button>
@@ -537,8 +559,8 @@ export default function TimetablePage() {
               <p className="text-sm">Select an academic year and term to view the timetable</p>
               {canManage && (
                 <button
-                  onClick={openCreate}
-                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
+                  onClick={() => openCreate()}
+                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-brand-900"
                 >
                   <Plus size={16} /> Add Slot
                 </button>
@@ -564,11 +586,25 @@ export default function TimetablePage() {
               events={allEvents}
               dayHeaderFormat={{ weekday: "short" }}
               datesSet={updateTitle}
-              dateClick={() => { if (canManage) openCreate(); }}
-              eventClick={(arg: EventClickArg) => {
+              dateClick={(arg) => {
                 if (!canManage) return;
+                const d = arg.date;
+                const dayEnum = FC_DAY_MAP[d.getDay()];
+                const hh = String(d.getHours()).padStart(2, "0");
+                const mm = String(d.getMinutes()).padStart(2, "0");
+                const startTime = `${hh}:${mm}`;
+                // default 45-min period
+                const endD = new Date(d.getTime() + 45 * 60 * 1000);
+                const endTime = `${String(endD.getHours()).padStart(2, "0")}:${String(endD.getMinutes()).padStart(2, "0")}`;
+                openCreate({ dayOfWeek: dayEnum ?? "MON", startTime, endTime });
+              }}
+              eventClick={(arg: EventClickArg) => {
                 const e: TimetableEntry = arg.event.extendedProps.entry;
-                if (e) setDeleteTarget(e);
+                if (!e) return;
+                setDetailEntry(e);
+                setScheduleMode(null);
+                setScheduleDate("");
+                setExternalLink("");
               }}
               eventContent={(arg) => {
                 const e: TimetableEntry | undefined = arg.event.extendedProps.entry;
@@ -598,9 +634,13 @@ export default function TimetablePage() {
                   );
                 }
 
+                const hasLive = e && e.liveClasses && e.liveClasses.length > 0;
                 return (
                   <div className="p-1 text-xs leading-tight overflow-hidden h-full relative group">
-                    <div className="font-semibold truncate">{arg.event.title}</div>
+                    <div className="font-semibold truncate flex items-center gap-1">
+                      {hasLive && <Video size={10} className="shrink-0 opacity-90" />}
+                      {arg.event.title}
+                    </div>
                     {e && (
                       <>
                         <div className="truncate opacity-90">{e.teacher.firstName} {e.teacher.lastName}</div>
@@ -614,14 +654,6 @@ export default function TimetablePage() {
                         {teacherMap[watchTeacher] ?? "Teacher TBD"}
                       </div>
                     )}
-                    {canManage && !isDraft && e && (
-                      <button
-                        onClick={(ev) => { ev.stopPropagation(); setDeleteTarget(e); }}
-                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-white/70 hover:text-white transition-opacity"
-                      >
-                        <Trash2 size={10} />
-                      </button>
-                    )}
                   </div>
                 );
               }}
@@ -633,7 +665,8 @@ export default function TimetablePage() {
       {/* ── Create Slot Modal (admin only) ── */}
       {canManage && (
         <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Timetable Slot">
-          <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="space-y-4">
+          <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="flex flex-col">
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
             {serverError && (
               <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>
             )}
@@ -759,7 +792,7 @@ export default function TimetablePage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Day</label>
                 <select
                   {...register("dayOfWeek")}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   {(["MON", "TUE", "WED", "THU", "FRI", "SAT"] as DayOfWeek[]).map((d) => (
                     <option key={d} value={d}>{DAY_LABELS[d]}</option>
@@ -771,7 +804,7 @@ export default function TimetablePage() {
                 <input
                   type="time"
                   {...register("startTime")}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 {errors.startTime && <p className="text-xs text-red-500 mt-1">{errors.startTime.message}</p>}
               </div>
@@ -780,7 +813,7 @@ export default function TimetablePage() {
                 <input
                   type="time"
                   {...register("endTime")}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 {errors.endTime && <p className="text-xs text-red-500 mt-1">{errors.endTime.message}</p>}
               </div>
@@ -794,7 +827,7 @@ export default function TimetablePage() {
               <input
                 {...register("periodLabel")}
                 placeholder="e.g. Period 1"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
@@ -805,25 +838,216 @@ export default function TimetablePage() {
                 Live preview shown on calendar in green
               </div>
             )}
+          </div>
 
-            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setCreateOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={createMutation.isPending}
-                className="px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                {createMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                Add Slot
-              </button>
-            </div>
+          <div className="flex justify-end gap-3 pt-3 mt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setCreateOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-brand-900 disabled:opacity-50 flex items-center gap-2"
+            >
+              {createMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              Add Slot
+            </button>
+          </div>
           </form>
+        </Modal>
+      )}
+
+      {/* ── Slot Detail Modal ── */}
+      {detailEntry && (
+        <Modal
+          open={Boolean(detailEntry)}
+          onClose={() => { setDetailEntry(null); setScheduleMode(null); }}
+          title={detailEntry.subject.name}
+        >
+          <div className="space-y-4">
+            {/* Entry info */}
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="space-y-2">
+                <div>
+                  <span className="text-slate-500 text-xs">Day &amp; Time</span>
+                  <p className="font-medium">{DAY_LABELS[detailEntry.dayOfWeek]} · {detailEntry.startTime} – {detailEntry.endTime}</p>
+                </div>
+                <div>
+                  <span className="text-slate-500 text-xs">Teacher</span>
+                  <p className="font-medium">{detailEntry.teacher.firstName} {detailEntry.teacher.lastName}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {detailEntry.class && (
+                  <div>
+                    <span className="text-slate-500 text-xs">Class</span>
+                    <p className="font-medium">{detailEntry.class.name}</p>
+                  </div>
+                )}
+                {detailEntry.gradeLevel && (
+                  <div>
+                    <span className="text-slate-500 text-xs">Grade</span>
+                    <p className="font-medium">{detailEntry.gradeLevel.name}{!detailEntry.class ? " (all classes)" : ""}</p>
+                  </div>
+                )}
+                {detailEntry.periodLabel && (
+                  <div>
+                    <span className="text-slate-500 text-xs">Period</span>
+                    <p className="font-medium">{detailEntry.periodLabel}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Upcoming live classes */}
+            {detailEntry.liveClasses && detailEntry.liveClasses.length > 0 && (
+              <div className="border-t border-slate-100 pt-3 space-y-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Upcoming Sessions</p>
+                {detailEntry.liveClasses.map((lc) => (
+                  <div key={lc.id} className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">{lc.title}</p>
+                      <p className="text-xs text-slate-500">{new Date(lc.scheduledAt).toLocaleString()}</p>
+                    </div>
+                    {!isParent && (
+                      lc.status === "LIVE" ? (
+                        <a
+                          href={lc.joinUrl ?? `/live-classes/${lc.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white text-xs font-semibold rounded-lg animate-pulse"
+                        >
+                          <Video size={12} /> Live Now
+                        </a>
+                      ) : (
+                        <a
+                          href={lc.joinUrl ?? `/live-classes/${lc.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-lg hover:bg-brand-900"
+                        >
+                          <Video size={12} /> Join
+                        </a>
+                      )
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Teacher actions: schedule live class */}
+            {(isTeacher && user?.id === detailEntry.teacherId) || canManage ? (
+              <div className="border-t border-slate-100 pt-3 space-y-3">
+                {!scheduleMode ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setScheduleMode("livekit")}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-brand-900"
+                    >
+                      <Video size={14} /> Schedule Live Class
+                    </button>
+                    <button
+                      onClick={() => setScheduleMode("external")}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50"
+                    >
+                      <ExternalLink size={14} /> Add External Link
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3 bg-slate-50 rounded-xl p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-slate-700">
+                        {scheduleMode === "livekit" ? "Schedule Live Class" : "Add External Link"}
+                      </p>
+                      <button onClick={() => setScheduleMode(null)} className="text-slate-400 hover:text-slate-600">
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 mb-1 block">Date &amp; Time</label>
+                      <input
+                        type="datetime-local"
+                        value={scheduleDate}
+                        onChange={(e) => setScheduleDate(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                      />
+                    </div>
+
+                    {scheduleMode === "external" && (
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 mb-1 block">Meeting Link (Google Meet / Zoom)</label>
+                        <input
+                          type="url"
+                          value={externalLink}
+                          onChange={(e) => setExternalLink(e.target.value)}
+                          placeholder="https://meet.google.com/..."
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 mb-1 block">Duration (minutes)</label>
+                      <input
+                        type="number"
+                        min={15}
+                        max={180}
+                        value={scheduleDuration}
+                        onChange={(e) => setScheduleDuration(Number(e.target.value))}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                      />
+                    </div>
+
+                    <button
+                      disabled={!scheduleDate || scheduleLiveClassMutation.isPending || (!detailEntry.classId) || (scheduleMode === "external" && !externalLink)}
+                      onClick={() => {
+                        if (!detailEntry.classId) {
+                          toast.error("This slot is grade-wide. Open Live Classes to schedule for a specific class.");
+                          return;
+                        }
+                        scheduleLiveClassMutation.mutate({
+                          classId: detailEntry.classId,
+                          termId: detailEntry.termId,
+                          timetableEntryId: detailEntry.id,
+                          title: `${detailEntry.subject.name} — ${DAY_LABELS[detailEntry.dayOfWeek]} ${detailEntry.startTime}`,
+                          scheduledAt: new Date(scheduleDate).toISOString(),
+                          duration: scheduleDuration,
+                          joinUrl: scheduleMode === "external" ? externalLink : undefined,
+                        });
+                      }}
+                      className="w-full py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-brand-900 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {scheduleLiveClassMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Video size={14} />}
+                      {scheduleMode === "livekit" ? "Create Room & Schedule" : "Save Link & Schedule"}
+                    </button>
+
+                    {!detailEntry.classId && (
+                      <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                        Grade-wide slots can't be scheduled directly — go to Live Classes and select a specific class.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* Admin delete */}
+            {canManage && (
+              <div className="border-t border-slate-100 pt-3 flex justify-end">
+                <button
+                  onClick={() => { setDetailEntry(null); setDeleteTarget(detailEntry); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+                >
+                  <Trash2 size={12} /> Delete Slot
+                </button>
+              </div>
+            )}
+          </div>
         </Modal>
       )}
 
@@ -899,7 +1123,7 @@ export default function TimetablePage() {
               <button
                 type="submit"
                 disabled={cloneMutation.isPending}
-                className="px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-brand-900 disabled:opacity-50 flex items-center gap-2"
               >
                 {cloneMutation.isPending && <Loader2 size={14} className="animate-spin" />}
                 Clone Timetable
