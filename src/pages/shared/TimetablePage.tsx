@@ -913,24 +913,26 @@ export default function TimetablePage() {
                       <p className="text-sm font-medium text-slate-800">{lc.title}</p>
                       <p className="text-xs text-slate-500">{new Date(lc.scheduledAt).toLocaleString()}</p>
                     </div>
-                    {lc.status === "LIVE" ? (
-                      <a
-                        href={lc.joinUrl ?? `/live-classes/${lc.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white text-xs font-semibold rounded-lg animate-pulse"
-                      >
-                        <Video size={12} /> Live Now
-                      </a>
-                    ) : (
-                      <a
-                        href={lc.joinUrl ?? `/live-classes/${lc.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-lg hover:bg-brand-900"
-                      >
-                        <Video size={12} /> Join
-                      </a>
+                    {!isParent && (
+                      lc.status === "LIVE" ? (
+                        <a
+                          href={lc.joinUrl ?? `/live-classes/${lc.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white text-xs font-semibold rounded-lg animate-pulse"
+                        >
+                          <Video size={12} /> Live Now
+                        </a>
+                      ) : (
+                        <a
+                          href={lc.joinUrl ?? `/live-classes/${lc.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-lg hover:bg-brand-900"
+                        >
+                          <Video size={12} /> Join
+                        </a>
+                      )
                     )}
                   </div>
                 ))}
