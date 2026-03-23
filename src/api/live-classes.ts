@@ -6,7 +6,7 @@ export const liveClassesApi = {
   list: (params?: PaginationParams & { classId?: string; lessonId?: string; status?: string }) =>
     apiClient.get<PaginatedResponse<LiveClass>>("/live-classes", { params }),
 
-  create: (dto: { classId?: string; gradeLevelId?: string; termId?: string; lessonId?: string; timetableEntryId?: string; title: string; description?: string; scheduledAt: string; duration?: number; joinUrl?: string }) =>
+  create: (dto: { classId?: string; gradeLevelId?: string; termId?: string; lessonId?: string; timetableEntryId?: string; title: string; description?: string; scheduledAt: string; duration?: number; joinUrl?: string; repeatWeekly?: boolean; repeatWeeks?: number }) =>
     apiClient.post<ApiResponse<LiveClass>>("/live-classes", dto),
 
   getById: (id: string) =>

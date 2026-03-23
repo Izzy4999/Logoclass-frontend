@@ -67,13 +67,6 @@ function nextOccurrence(dayOfWeek: DayOfWeek, time: string): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/** Add `weeks` × 7 days to a datetime-local string. */
-function addWeeks(datetimeLocal: string, weeks: number): string {
-  const d = new Date(datetimeLocal);
-  d.setDate(d.getDate() + weeks * 7);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-}
 
 function fakeMeta(length: number): PaginationMeta {
   return { total: length, page: 1, limit: 100, totalPages: 1 };
@@ -287,10 +280,11 @@ export default function TimetablePage() {
   });
 
   const scheduleLiveClassMutation = useMutation({
-    mutationFn: (dtos: Parameters<typeof liveClassesApi.create>[0][]) =>
-      Promise.all(dtos.map((dto) => liveClassesApi.create(dto))),
-    onSuccess: (results) => {
-      toast.success(results.length === 1 ? "Live class scheduled" : `${results.length} live classes scheduled (weekly)`);
+    mutationFn: (dto: Parameters<typeof liveClassesApi.create>[0]) => liveClassesApi.create(dto),
+    onSuccess: (res) => {
+      const data = res.data.data as any;
+      const count = data?.total ?? 1;
+      toast.success(count === 1 ? "Live class scheduled" : `${count} weekly sessions scheduled`);
       setScheduleMode(null);
       setScheduleDate("");
       setExternalLink("");
@@ -1080,22 +1074,19 @@ export default function TimetablePage() {
                     <button
                       disabled={!scheduleDate || scheduleLiveClassMutation.isPending || (scheduleMode === "external" && !externalLink)}
                       onClick={() => {
-                        const base = {
+                        scheduleLiveClassMutation.mutate({
                           ...(detailEntry.classId
                             ? { classId: detailEntry.classId }
                             : { gradeLevelId: detailEntry.gradeLevelId ?? undefined }),
                           termId: detailEntry.termId,
                           timetableEntryId: detailEntry.id,
                           title: `${detailEntry.subject.name} — ${DAY_LABELS[detailEntry.dayOfWeek]} ${detailEntry.startTime}`,
+                          scheduledAt: new Date(scheduleDate).toISOString(),
                           duration: scheduleDuration,
                           joinUrl: scheduleMode === "external" ? externalLink : undefined,
-                        };
-                        const count = repeatWeekly ? repeatWeeks : 1;
-                        const dtos = Array.from({ length: count }, (_, i) => ({
-                          ...base,
-                          scheduledAt: new Date(addWeeks(scheduleDate, i)).toISOString(),
-                        }));
-                        scheduleLiveClassMutation.mutate(dtos);
+                          repeatWeekly: repeatWeekly || undefined,
+                          repeatWeeks: repeatWeekly ? repeatWeeks : undefined,
+                        });
                       }}
                       className="w-full py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-brand-900 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
