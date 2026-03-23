@@ -398,7 +398,7 @@ export default function TimetablePage() {
               </button>
 
               <button
-                onClick={openCreate}
+                onClick={() => openCreate()}
                 className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-brand-900"
               >
                 <Plus size={16} /> Add Slot
@@ -559,7 +559,7 @@ export default function TimetablePage() {
               <p className="text-sm">Select an academic year and term to view the timetable</p>
               {canManage && (
                 <button
-                  onClick={openCreate}
+                  onClick={() => openCreate()}
                   className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-brand-900"
                 >
                   <Plus size={16} /> Add Slot
