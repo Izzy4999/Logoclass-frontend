@@ -1004,14 +1004,12 @@ export default function TimetablePage() {
                     </div>
 
                     <button
-                      disabled={!scheduleDate || scheduleLiveClassMutation.isPending || (!detailEntry.classId) || (scheduleMode === "external" && !externalLink)}
+                      disabled={!scheduleDate || scheduleLiveClassMutation.isPending || (scheduleMode === "external" && !externalLink)}
                       onClick={() => {
-                        if (!detailEntry.classId) {
-                          toast.error("This slot is grade-wide. Open Live Classes to schedule for a specific class.");
-                          return;
-                        }
                         scheduleLiveClassMutation.mutate({
-                          classId: detailEntry.classId,
+                          ...(detailEntry.classId
+                            ? { classId: detailEntry.classId }
+                            : { gradeLevelId: detailEntry.gradeLevelId ?? undefined }),
                           termId: detailEntry.termId,
                           timetableEntryId: detailEntry.id,
                           title: `${detailEntry.subject.name} — ${DAY_LABELS[detailEntry.dayOfWeek]} ${detailEntry.startTime}`,
@@ -1025,12 +1023,6 @@ export default function TimetablePage() {
                       {scheduleLiveClassMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Video size={14} />}
                       {scheduleMode === "livekit" ? "Create Room & Schedule" : "Save Link & Schedule"}
                     </button>
-
-                    {!detailEntry.classId && (
-                      <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
-                        Grade-wide slots can't be scheduled directly — go to Live Classes and select a specific class.
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
