@@ -56,6 +56,18 @@ const ADMIN_ITEMS: NavItem[] = [
   { label: "Settings", path: "/settings", icon: Settings, permission: "MANAGE_TENANT_SETTINGS" },
 ];
 
+const TEACHER_ITEMS: NavItem[] = [
+  { label: "Dashboard",    path: "/dashboard",    icon: LayoutDashboard, alwaysShow: true },
+  { label: "Timetable",    path: "/timetable",    icon: CalendarDays,    alwaysShow: true },
+  { label: "Lessons",      path: "/lessons",      icon: BookOpen,        permission: "MANAGE_LESSONS" },
+  { label: "Live Classes", path: "/live-classes", icon: Video,           permission: "MANAGE_LIVE_CLASSES", feature: "LIVE_CLASSES" },
+  { label: "Assignments",  path: "/assignments",  icon: ClipboardList,   permission: "MANAGE_ASSIGNMENTS" },
+  { label: "Quizzes",      path: "/quizzes",      icon: PenTool,         permission: "MANAGE_QUIZZES", feature: "QUIZZES" },
+  { label: "Exams",        path: "/exams",        icon: FileText,        permission: "MANAGE_EXAMS" },
+  { label: "Attendance",   path: "/attendance",   icon: UserCheck,       permission: "MARK_ATTENDANCE" },
+  { label: "Announcements", path: "/announcements", icon: Megaphone,     permission: "CREATE_ANNOUNCEMENT" },
+];
+
 const STUDENT_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, alwaysShow: true },
   { label: "Timetable", path: "/timetable", icon: CalendarDays, alwaysShow: true },
@@ -90,7 +102,7 @@ const SHARED_ITEMS: NavItem[] = [
 ];
 
 export default function Sidebar() {
-  const { user, isSuperAdmin, isStudent, isParent, can, logout } = useAuth();
+  const { user, isSuperAdmin, isStudent, isParent, isTeacher, can, logout } = useAuth();
   const { sidebarCollapsed, toggleSidebar } = useUiStore();
   const navigate = useNavigate();
 
@@ -111,8 +123,9 @@ export default function Sidebar() {
 
   const getNavItems = (): NavItem[] => {
     if (isSuperAdmin) return SUPER_ADMIN_ITEMS;
-    if (isStudent) return STUDENT_ITEMS;
-    if (isParent) return PARENT_ITEMS;
+    if (isStudent)    return STUDENT_ITEMS;
+    if (isParent)     return PARENT_ITEMS;
+    if (isTeacher)    return TEACHER_ITEMS;
     return ADMIN_ITEMS;
   };
 
