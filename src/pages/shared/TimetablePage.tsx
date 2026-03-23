@@ -49,6 +49,25 @@ function subjectColor(subjectId: string) {
   return SUBJECT_COLORS[Math.abs(h) % SUBJECT_COLORS.length];
 }
 
+/** Returns a datetime-local string for the next occurrence of `dayOfWeek` at `time` (HH:MM). */
+function nextOccurrence(dayOfWeek: DayOfWeek, time: string): string {
+  const targetDay = DAY_FC[dayOfWeek]; // 1=Mon … 6=Sat
+  const now = new Date();
+  let diff = targetDay - now.getDay();
+  if (diff < 0) diff += 7;
+  if (diff === 0) {
+    const [h, m] = time.split(":").map(Number);
+    if (now.getHours() * 60 + now.getMinutes() >= h * 60 + m) diff = 7;
+  }
+  const d = new Date(now);
+  d.setDate(d.getDate() + diff);
+  const [h, m] = time.split(":");
+  d.setHours(Number(h), Number(m), 0, 0);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+
 function fakeMeta(length: number): PaginationMeta {
   return { total: length, page: 1, limit: 100, totalPages: 1 };
 }
@@ -152,6 +171,8 @@ export default function TimetablePage() {
   const [scheduleDate, setScheduleDate] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [scheduleDuration, setScheduleDuration] = useState(45);
+  const [repeatWeekly, setRepeatWeekly] = useState(false);
+  const [repeatWeeks, setRepeatWeeks] = useState(8);
   const [serverError, setServerError] = useState("");
 
   // Subject/teacher name cache for draft preview
@@ -260,11 +281,15 @@ export default function TimetablePage() {
 
   const scheduleLiveClassMutation = useMutation({
     mutationFn: (dto: Parameters<typeof liveClassesApi.create>[0]) => liveClassesApi.create(dto),
-    onSuccess: () => {
-      toast.success("Live class scheduled");
+    onSuccess: (res) => {
+      const data = res.data.data as any;
+      const count = data?.total ?? 1;
+      toast.success(count === 1 ? "Live class scheduled" : `${count} weekly sessions scheduled`);
       setScheduleMode(null);
       setScheduleDate("");
       setExternalLink("");
+      setRepeatWeekly(false);
+      setRepeatWeeks(8);
       invalidate();
     },
     onError: (e: any) => toast.error(e.response?.data?.message ?? "Failed to schedule"),
@@ -865,7 +890,7 @@ export default function TimetablePage() {
       {detailEntry && (
         <Modal
           open={Boolean(detailEntry)}
-          onClose={() => { setDetailEntry(null); setScheduleMode(null); }}
+          onClose={() => { setDetailEntry(null); setScheduleMode(null); setRepeatWeekly(false); setRepeatWeeks(8); setScheduleDate(""); setExternalLink(""); }}
           title={detailEntry.subject.name}
         >
           <div className="space-y-4">
@@ -945,13 +970,24 @@ export default function TimetablePage() {
                 {!scheduleMode ? (
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setScheduleMode("livekit")}
+                      onClick={() => {
+                        setScheduleDate(nextOccurrence(detailEntry.dayOfWeek, detailEntry.startTime));
+                        setRepeatWeekly(false);
+                        setRepeatWeeks(8);
+                        setScheduleMode("livekit");
+                      }}
                       className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-brand-900"
                     >
                       <Video size={14} /> Schedule Live Class
                     </button>
                     <button
-                      onClick={() => setScheduleMode("external")}
+                      onClick={() => {
+                        setScheduleDate(nextOccurrence(detailEntry.dayOfWeek, detailEntry.startTime));
+                        setRepeatWeekly(false);
+                        setRepeatWeeks(8);
+                        setExternalLink("");
+                        setScheduleMode("external");
+                      }}
                       className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50"
                     >
                       <ExternalLink size={14} /> Add External Link
@@ -1003,34 +1039,62 @@ export default function TimetablePage() {
                       />
                     </div>
 
+                    {/* Repeat weekly toggle */}
+                    <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">Repeat weekly</p>
+                        <p className="text-xs text-slate-400">Create one session per week automatically</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setRepeatWeekly((v) => !v)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${repeatWeekly ? "bg-primary" : "bg-slate-200"}`}
+                      >
+                        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${repeatWeekly ? "translate-x-4" : "translate-x-0"}`} />
+                      </button>
+                    </div>
+
+                    {repeatWeekly && (
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 mb-1 block">Number of weeks</label>
+                        <input
+                          type="number"
+                          min={2}
+                          max={52}
+                          value={repeatWeeks}
+                          onChange={(e) => setRepeatWeeks(Math.min(52, Math.max(2, Number(e.target.value))))}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">
+                          Will create {repeatWeeks} sessions starting {scheduleDate ? new Date(scheduleDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—"}
+                        </p>
+                      </div>
+                    )}
+
                     <button
-                      disabled={!scheduleDate || scheduleLiveClassMutation.isPending || (!detailEntry.classId) || (scheduleMode === "external" && !externalLink)}
+                      disabled={!scheduleDate || scheduleLiveClassMutation.isPending || (scheduleMode === "external" && !externalLink)}
                       onClick={() => {
-                        if (!detailEntry.classId) {
-                          toast.error("This slot is grade-wide. Open Live Classes to schedule for a specific class.");
-                          return;
-                        }
                         scheduleLiveClassMutation.mutate({
-                          classId: detailEntry.classId,
+                          ...(detailEntry.classId
+                            ? { classId: detailEntry.classId }
+                            : { gradeLevelId: detailEntry.gradeLevelId ?? undefined }),
                           termId: detailEntry.termId,
                           timetableEntryId: detailEntry.id,
                           title: `${detailEntry.subject.name} — ${DAY_LABELS[detailEntry.dayOfWeek]} ${detailEntry.startTime}`,
                           scheduledAt: new Date(scheduleDate).toISOString(),
                           duration: scheduleDuration,
                           joinUrl: scheduleMode === "external" ? externalLink : undefined,
+                          repeatWeekly: repeatWeekly || undefined,
+                          repeatWeeks: repeatWeekly ? repeatWeeks : undefined,
                         });
                       }}
                       className="w-full py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-brand-900 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {scheduleLiveClassMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Video size={14} />}
-                      {scheduleMode === "livekit" ? "Create Room & Schedule" : "Save Link & Schedule"}
+                      {scheduleMode === "livekit"
+                        ? repeatWeekly ? `Create ${repeatWeeks} Weekly Rooms` : "Create Room & Schedule"
+                        : repeatWeekly ? `Save Link for ${repeatWeeks} Weeks` : "Save Link & Schedule"}
                     </button>
-
-                    {!detailEntry.classId && (
-                      <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
-                        Grade-wide slots can't be scheduled directly — go to Live Classes and select a specific class.
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
