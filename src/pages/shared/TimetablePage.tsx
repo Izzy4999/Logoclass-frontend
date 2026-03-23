@@ -340,14 +340,18 @@ export default function TimetablePage() {
         ]
       : [];
 
-  function openCreate() {
+  const FC_DAY_MAP: Record<number, DayOfWeek> = { 1: "MON", 2: "TUE", 3: "WED", 4: "THU", 5: "FRI", 6: "SAT" };
+
+  function openCreate(prefill?: { dayOfWeek?: DayOfWeek; startTime?: string; endTime?: string }) {
     reset({
       scopeType:      viewMode === "class" ? "class" : "grade",
-      dayOfWeek:      "MON",
+      dayOfWeek:      prefill?.dayOfWeek ?? "MON",
+      startTime:      prefill?.startTime ?? "",
+      endTime:        prefill?.endTime   ?? "",
       termId:         selectedTermId,
       academicYearId: selectedAcademicYearId,
-      classId:        viewMode === "class" ? selectedClassId       : undefined,
-      gradeLevelId:   viewMode === "grade" ? selectedGradeLevelId  : undefined,
+      classId:        viewMode === "class" ? selectedClassId      : undefined,
+      gradeLevelId:   viewMode === "grade" ? selectedGradeLevelId : undefined,
     });
     setServerError("");
     setCreateOpen(true);
@@ -564,7 +568,18 @@ export default function TimetablePage() {
               events={allEvents}
               dayHeaderFormat={{ weekday: "short" }}
               datesSet={updateTitle}
-              dateClick={() => { if (canManage) openCreate(); }}
+              dateClick={(arg) => {
+                if (!canManage) return;
+                const d = arg.date;
+                const dayEnum = FC_DAY_MAP[d.getDay()];
+                const hh = String(d.getHours()).padStart(2, "0");
+                const mm = String(d.getMinutes()).padStart(2, "0");
+                const startTime = `${hh}:${mm}`;
+                // default 45-min period
+                const endD = new Date(d.getTime() + 45 * 60 * 1000);
+                const endTime = `${String(endD.getHours()).padStart(2, "0")}:${String(endD.getMinutes()).padStart(2, "0")}`;
+                openCreate({ dayOfWeek: dayEnum ?? "MON", startTime, endTime });
+              }}
               eventClick={(arg: EventClickArg) => {
                 if (!canManage) return;
                 const e: TimetableEntry = arg.event.extendedProps.entry;
@@ -633,7 +648,7 @@ export default function TimetablePage() {
       {/* ── Create Slot Modal (admin only) ── */}
       {canManage && (
         <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Timetable Slot">
-          <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="space-y-4">
+          <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
             {serverError && (
               <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{serverError}</p>
             )}
