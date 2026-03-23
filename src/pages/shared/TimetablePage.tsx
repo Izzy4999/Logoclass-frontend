@@ -304,7 +304,7 @@ export default function TimetablePage() {
       .then(r => ({ data: r.data.data ?? [], meta: r.data.meta ?? fakeMeta(0) }));
 
   const teacherFetcher = ({ page, search }: { page: number; search: string }) =>
-    usersApi.list({ page, limit: 50, search: search || undefined })
+    usersApi.list({ page, limit: 50, search: search || undefined, roleName: "Teacher" })
       .then(r => ({ data: r.data.data ?? [], meta: r.data.meta ?? fakeMeta(0) }));
 
   const subjectFetcher = ({ page, search }: { page: number; search: string }) =>
