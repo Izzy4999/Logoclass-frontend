@@ -7,7 +7,7 @@ import LoadingSpinner from "@/components/shared/LoadingSpinner";
 export function L(factory: () => Promise<{ default: ComponentType }>) {
   const Comp = lazy(factory);
   return (
-    <Suspense fallback={<LoadingSpinner fullScreen />}>
+    <Suspense fallback={<LoadingSpinner className="min-h-[60vh]" />}>
       <Comp />
     </Suspense>
   );

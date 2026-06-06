@@ -43,10 +43,16 @@ export default function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-primary focus:text-white focus:text-sm focus:font-semibold focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header />
-        <main ref={mainRef} className="flex-1 overflow-y-auto p-6">
+        <main ref={mainRef} id="main-content" className="flex-1 overflow-y-auto p-6">
           <AnimatePresence mode="wait" initial={false}>
             <AnimatedPage key={location.pathname}>
               <Outlet />

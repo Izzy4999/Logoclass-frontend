@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
@@ -22,12 +22,14 @@ export default function StatsCard({
   iconColor = "text-primary",
   index = 0,
 }: StatsCardProps) {
+  const prefersReduced = useReducedMotion();
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={prefersReduced ? false : { opacity: 0, y: 20 }}
+      animate={prefersReduced ? {} : { opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.07, ease: "easeOut" }}
-      whileHover={{ y: -3, boxShadow: "0 8px 24px -4px rgba(30,64,175,0.12)" }}
+      whileHover={prefersReduced ? {} : { y: -3, boxShadow: "0 8px 24px -4px rgba(30,64,175,0.12)" }}
+      whileTap={prefersReduced ? {} : { scale: 0.98 }}
       className={cn(
         "bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-start gap-4 cursor-default",
         className

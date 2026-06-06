@@ -59,10 +59,10 @@ export default function Login() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-[1.6rem] font-extrabold text-[#1E3A8A] tracking-tight leading-tight">
+        <h2 className="text-3xl font-extrabold text-[#1E3A8A] tracking-tight leading-tight">
           Welcome back 👋
         </h2>
-        <p className="text-[13px] text-slate-500 mt-1">Sign in to your school portal</p>
+        <p className="text-sm text-slate-500 mt-1">Sign in to your school portal</p>
       </div>
 
       {/* Role pills */}
@@ -80,25 +80,26 @@ export default function Login() {
               visible: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.22, ease: "easeOut" } },
             }}
             className={cn(
-              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border",
+              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold border",
               cls
             )}
           >
-            <Icon className="h-3 w-3" />
+            <Icon className="h-3 w-3" aria-hidden="true" />
             {label}
           </motion.span>
         ))}
       </motion.div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         {/* Success alert */}
         {successMessage && (
           <motion.div
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
+            role="status"
             className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 text-emerald-700 text-sm border border-emerald-200"
           >
-            <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+            <CheckCircle2 className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
             {successMessage}
           </motion.div>
         )}
@@ -108,25 +109,30 @@ export default function Login() {
           <motion.div
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
+            role="alert"
+            id="server-error"
             className="flex items-center gap-2 p-3 rounded-xl bg-red-50 text-red-700 text-sm border border-red-200"
           >
-            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
             {serverError}
           </motion.div>
         )}
 
         {/* Email */}
         <div>
-          <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">
+          <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-1.5">
             Email address
           </label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" aria-hidden="true" />
             <input
               {...register("email")}
+              id="email"
               type="email"
               autoComplete="email"
               placeholder="you@school.edu.ng"
+              aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? "email-error" : undefined}
               className={cn(
                 "w-full pl-9 pr-4 py-2.5 text-sm rounded-xl outline-none transition-all",
                 "border bg-slate-50 placeholder:text-slate-400",
@@ -138,24 +144,27 @@ export default function Login() {
             />
           </div>
           {errors.email && (
-            <p className="text-[12px] text-red-500 mt-1.5 flex items-center gap-1">
-              <span className="font-bold">!</span> {errors.email.message}
+            <p id="email-error" role="alert" className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
+              <span aria-hidden="true" className="font-bold">!</span> {errors.email.message}
             </p>
           )}
         </div>
 
         {/* Password */}
         <div>
-          <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">
+          <label htmlFor="password" className="block text-sm font-semibold text-slate-700 mb-1.5">
             Password
           </label>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" aria-hidden="true" />
             <input
               {...register("password")}
+              id="password"
               type={showPassword ? "text" : "password"}
               autoComplete="current-password"
               placeholder="••••••••"
+              aria-invalid={!!errors.password}
+              aria-describedby={errors.password ? "password-error" : undefined}
               className={cn(
                 "w-full pl-9 pr-10 py-2.5 text-sm rounded-xl outline-none transition-all",
                 "border bg-slate-50 placeholder:text-slate-400",
@@ -168,15 +177,16 @@ export default function Login() {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
               tabIndex={-1}
             >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
             </button>
           </div>
           {errors.password && (
-            <p className="text-[12px] text-red-500 mt-1.5 flex items-center gap-1">
-              <span className="font-bold">!</span> {errors.password.message}
+            <p id="password-error" role="alert" className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
+              <span aria-hidden="true" className="font-bold">!</span> {errors.password.message}
             </p>
           )}
         </div>
@@ -185,7 +195,7 @@ export default function Login() {
         <div className="flex justify-end -mt-1">
           <Link
             to="/forgot-password"
-            className="text-[13px] text-blue-600 hover:text-blue-700 font-medium hover:underline"
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium hover:underline"
           >
             Forgot password?
           </Link>
@@ -204,16 +214,16 @@ export default function Login() {
           )}
         >
           {isSubmitting ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Signing in…</>
+            <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Signing in…</>
           ) : (
-            <>Sign in <ArrowRight className="h-4 w-4" /></>
+            <>Sign in <ArrowRight className="h-4 w-4" aria-hidden="true" /></>
           )}
         </button>
       </form>
 
       {/* Register link */}
       <div className="mt-6 pt-5 border-t border-slate-100 text-center">
-        <p className="text-[13px] text-slate-500">
+        <p className="text-sm text-slate-500">
           New school?{" "}
           <Link to="/register" className="text-blue-600 font-semibold hover:underline">
             Register your school →

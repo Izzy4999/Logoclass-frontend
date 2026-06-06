@@ -59,6 +59,9 @@ export default {
           foreground: "hsl(var(--card-foreground))",
         },
       },
+      fontSize: {
+        "2xs": ["0.6875rem", { lineHeight: "1rem" }],
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
