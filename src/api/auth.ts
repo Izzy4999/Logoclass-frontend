@@ -10,11 +10,11 @@ export const authApi = {
   register: (dto: RegisterDto) =>
     apiClient.post<ApiResponse<{ message: string }>>("/auth/register", dto),
 
-  refresh: (refreshToken: string) =>
-    apiClient.post<ApiResponse<{ accessToken: string }>>("/auth/refresh", { refreshToken }),
+  refresh: () =>
+    apiClient.post<ApiResponse<{ accessToken: string }>>("/auth/refresh"),
 
-  logout: (refreshToken: string) =>
-    apiClient.post<ApiResponse<{ message: string }>>("/auth/logout", { refreshToken }),
+  logout: () =>
+    apiClient.post<ApiResponse<{ message: string }>>("/auth/logout"),
 
   forgotPassword: (dto: ForgotPasswordDto) =>
     apiClient.post<ApiResponse<{ message: string }>>("/auth/forgot-password", dto),

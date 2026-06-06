@@ -3,7 +3,7 @@ import { hasPermission, hasAnyPermission } from "@/lib/permissions";
 import type { Permission } from "@/types/role";
 
 export function useAuth() {
-  const { user, accessToken, refreshToken, isAuthenticated, mustChangePassword, setAuth, setMustChangePassword, logout, updateUser } =
+  const { user, accessToken, isAuthenticated, mustChangePassword, setAuth, setMustChangePassword, logout, updateUser } =
     useAuthStore();
 
   const can = (permission: Permission) => hasPermission(user, permission);
@@ -26,7 +26,6 @@ export function useAuth() {
   return {
     user,
     accessToken,
-    refreshToken,
     isAuthenticated,
     mustChangePassword,
     setAuth,

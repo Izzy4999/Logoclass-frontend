@@ -41,8 +41,8 @@ export default function Login() {
     setServerError("");
     try {
       const res = await authApi.login(data);
-      const { accessToken, refreshToken, mustChangePassword, user } = res.data.data;
-      setAuth(user, accessToken, refreshToken);
+      const { accessToken, mustChangePassword, user } = res.data.data;
+      setAuth(user, accessToken);
       if (mustChangePassword) {
         setMustChangePassword(true);
         navigate("/change-password", { replace: true });

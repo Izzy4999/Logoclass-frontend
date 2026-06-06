@@ -5,11 +5,10 @@ import type { User } from "@/types/user";
 interface AuthState {
   user: User | null;
   accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
   mustChangePassword: boolean;
 
-  setAuth: (user: User, accessToken: string, refreshToken: string) => void;
+  setAuth: (user: User, accessToken: string) => void;
   setAccessToken: (token: string) => void;
   setMustChangePassword: (value: boolean) => void;
   updateUser: (user: User) => void;
@@ -21,12 +20,11 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
       mustChangePassword: false,
 
-      setAuth: (user, accessToken, refreshToken) =>
-        set({ user, accessToken, refreshToken, isAuthenticated: true }),
+      setAuth: (user, accessToken) =>
+        set({ user, accessToken, isAuthenticated: true }),
 
       setAccessToken: (token) => set({ accessToken: token }),
 
@@ -38,16 +36,13 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           accessToken: null,
-          refreshToken: null,
           isAuthenticated: false,
           mustChangePassword: false,
         }),
     }),
     {
       name: "logosclass-auth",
-      // Only persist refreshToken and user — accessToken is short-lived
       partialize: (state) => ({
-        refreshToken: state.refreshToken,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
         mustChangePassword: state.mustChangePassword,

@@ -6,6 +6,7 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
 export const apiClient = axios.create({
   baseURL: BASE_URL,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true, // send HttpOnly refresh_token cookie on every request
 });
 
 // ── Request interceptor: attach Bearer token ──────────────────────────────────
@@ -43,13 +44,7 @@ apiClient.interceptors.response.use(
     };
 
     if (error.response?.status === 401 && !originalRequest._retry) {
-      const { refreshToken, setAccessToken, logout } = useAuthStore.getState();
-
-      if (!refreshToken) {
-        logout();
-        window.location.href = "/login";
-        return Promise.reject(error);
-      }
+      const { setAccessToken, logout } = useAuthStore.getState();
 
       if (isRefreshing) {
         return new Promise<string>((resolve, reject) => {
@@ -64,9 +59,12 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const res = await axios.post(`${BASE_URL}/auth/refresh`, {
-          refreshToken,
-        });
+        // No body needed — the HttpOnly refresh_token cookie is sent automatically
+        const res = await axios.post(
+          `${BASE_URL}/auth/refresh`,
+          {},
+          { withCredentials: true }
+        );
         const newToken: string = res.data.data.accessToken;
         setAccessToken(newToken);
         processQueue(null, newToken);
